@@ -32,6 +32,8 @@ additional passed assertion is neither full task success nor a statistically
 supported intelligence gain. The four Mithril failures were KG query output
 mismatches; the ontology used here validates terminal action types and does
 not provide domain facts or reasoning that would resolve those queries.
+The conservative analyzer reports one paired trial, zero both-pass pairs,
+and no task-clustered confidence interval from a one-task sample.
 
 The Mithril trial's runner source was committed at `832f4cdb2cecc07070c31de7632cd91e5dbece34`.
 Before the baseline trial, commit `012d73fc8ef342599083f7e6bfc0509f10dcfedb`

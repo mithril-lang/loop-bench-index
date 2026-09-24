@@ -27,3 +27,11 @@ token or model usage files.
 The summarizer marks known missing-verifier-dependency failures `unmeasured`;
 each scored trial also needs verifier execution evidence, since an emitted
 reward file alone can be a false score.
+
+`summarize.py JOBS_DIR > rows.json` exports public-safe per-trial rows.
+`analyze.py rows.json` then reports scored coverage, oracle controls, success
+rates, and task-clustered intervals when at least five distinct tasks exist.
+The resource index remains null until ten matched successful repeats span at
+least five tasks. This floor only prevents a tiny sample from displaying an
+index; it is not a claim that ten repeats establish statistical significance.
+An empty or receipt-free input is refused rather than reported as success.
