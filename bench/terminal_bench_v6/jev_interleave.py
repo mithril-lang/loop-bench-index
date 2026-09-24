@@ -25,8 +25,11 @@ QUESTIONS = {
 
 
 def decide(state, api_key):
+    model = os.environ.get('BENCH_JEV_MODEL')
+    if not model:
+        raise RuntimeError('BENCH_JEV_MODEL is required for the Jev lane')
     request = {
-        'model': 'typesafe/jev-1.13',
+        'model': model,
         'state': state,
         'questions': {'next_hypothesis': {
             'type': 'choice',
@@ -45,7 +48,8 @@ def decide(state, api_key):
     choice = answer.get('choice')
     probabilities = answer.get('probabilities')
     confidence = answer.get('confidence')
-    if (result.get('model', '').split('-2026')[0] != 'typesafe/jev-1.13'
+    resolved_model = result.get('model', '')
+    if (not (resolved_model == model or resolved_model.startswith(model + '-'))
             or choice not in QUESTIONS or not isinstance(probabilities, dict)
             or set(probabilities) != set(QUESTIONS)
             or not isinstance(confidence, (float, int))
@@ -56,7 +60,7 @@ def decide(state, api_key):
         raise RuntimeError('Jev usage receipt is incomplete')
     return {'choice': choice, 'confidence': confidence,
             'probabilities': probabilities, 'usage': usage,
-            'model': result['model'], 'request_id': result.get('id')}
+            'model': resolved_model, 'request_id': result.get('id')}
 
 
 class MithrilJevInterleavedAgent(MithrilDomainPrefillAgent):
