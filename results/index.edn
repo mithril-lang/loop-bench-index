@@ -1,0 +1,15 @@
+{:format "https://mithril.fund/bench-index/cohort-v1"
+ :definition "100 is the Hermes baseline; values are Mithril/Hermes multiplied by 100. Lower resource ratios mean less usage for parity-qualified pairs."
+ :cohorts
+ [{:corpus-id "readonly-git-status-v1"
+   :comparison-mode :stack
+   :models {:hermes "openai/gpt-4o-mini" :mithril "typesafe/jev-1.13"}
+   :runs 30 :successful-runs 22
+   :paired-runs 15 :equivalent-pairs 7 :equivalence-coverage 0.4666666666666667
+   :indices {:tokens 9.313433839224189
+             :cost-usd 9.110399568167042
+             :wall-ms 59.19042072084418
+             :agent-turns 49.18032786885246}
+   :unmeasured [:mithril-reasoning-tokens :hermes-effects]
+   :report "readonly-git-status-v1/report.edn"
+   :receipts "readonly-git-status-v1/receipts.edn"}]}
