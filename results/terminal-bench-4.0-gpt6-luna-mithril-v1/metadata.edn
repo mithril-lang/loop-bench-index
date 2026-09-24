@@ -1,0 +1,5 @@
+{:title "Terminal-Bench 4.0 GPT-6 Luna paired loop probe"
+ :source "https://github.com/harbor-framework/terminal-bench/tree/452bf305c6daa62fc59061d22133a7cbc7c1572e"
+ :result "three task pairs; all verifier rewards zero; no parity-qualified efficiency index"
+ :scope "custom Harbor agents; one run per lane per task; local exploratory sample"
+ :task-text-published? false}
