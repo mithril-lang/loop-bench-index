@@ -32,7 +32,7 @@ Results varied by task. On `ontology-kg-querying`, Mithril used 11.84% fewer rep
 - `total_tokens` is Hermes' provider-reported total, including cached context; costs are provider-model-metadata estimates, not invoices.
 - `agent wall time` is Harbor's `agent_execution` span. Environment setup and verifier time are excluded.
 - The first two task pairs used a 20-step cap. The Vigenère pair used a later 12-step cohort, but its verifier infrastructure failed and no outcome can be assigned.
-- Earlier invalid harness attempts are excluded from the six scored trials: one Harbor `ExecResult` field mismatch, one JSON response extraction failure, and one unhandled 120-second shell timeout. Their available model usage totals 19 calls and an estimated $0.038499; these are retained only in the local run archive, not assigned to a task score.
+- Earlier invalid harness attempts are excluded from the six reward-emitting trials: one Harbor `ExecResult` field mismatch, one JSON response extraction failure, and one unhandled 120-second shell timeout. Their available model usage totals 19 calls and an estimated $0.038499; these are retained only in the local run archive, not assigned to a task score.
 - The local runner used Harbor 0.1.43, Podman 5.6.0, and a Docker Compose compatibility shim. This compatibility environment and custom agent are not the official leaderboard runtime.
 - These results show task-family attempts, not general reasoning ability, Artificial Analysis Intelligence Index performance, or production readiness.
 
