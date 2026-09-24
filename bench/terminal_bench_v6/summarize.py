@@ -33,7 +33,14 @@ def trial_row(path):
             usages.append(json.loads(Path(usage_file).read_text()))
         except (ValueError, OSError):
             pass
+    jev_usages = []
+    for usage_file in meta.get("jev_usage_files", []):
+        try:
+            jev_usages.append(json.loads(Path(usage_file).read_text()))
+        except (ValueError, OSError):
+            pass
     usage_complete = len(usages) == meta.get("hermes_calls", -1) and len(usages) > 0
+    jev_usage_complete = len(jev_usages) == meta.get("jev_calls", 0)
     verifier_stdout = path.parent / "verifier" / "test-stdout.txt"
     output = verifier_stdout.read_text(errors="replace") if verifier_stdout.exists() else ""
     infrastructure_failure = any(marker in output for marker in (
@@ -49,7 +56,7 @@ def trial_row(path):
         except (ValueError, OSError, TypeError):
             pass
     # Other verifier formats need an explicit per-task audit before inclusion.
-    measured = not error and rewards and usage_complete and not infrastructure_failure and executed_tests > 0
+    measured = not error and rewards and usage_complete and jev_usage_complete and not infrastructure_failure and executed_tests > 0
     control_valid = oracle and not error and rewards and not infrastructure_failure and executed_tests > 0
     return {
         "task_id": trial.get("task_name"),
@@ -60,6 +67,10 @@ def trial_row(path):
         "status": ("control-pass" if rewards.get("reward") == 1.0 else "control-fail") if control_valid else ("scored" if measured else "unmeasured"),
         "reward": rewards.get("reward") if measured or control_valid else None,
         "model_calls": meta.get("hermes_calls"),
+        "jev_calls": meta.get("jev_calls", 0),
+        "jev_input_tokens": sum(u.get("input_tokens", 0) for u in jev_usages) if jev_usage_complete else None,
+        "jev_output_tokens": sum(u.get("output_tokens", 0) for u in jev_usages) if jev_usage_complete else None,
+        "jev_cost_usd": sum(u.get("cost", 0) for u in jev_usages) if jev_usage_complete else None,
         "provider_api_calls": sum(u.get("api_calls", 0) for u in usages) if usage_complete else None,
         "steps": meta.get("step_count"),
         "semantic_receipts": meta.get("semantic_receipts"),

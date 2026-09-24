@@ -43,6 +43,11 @@ and [v3 semantic-loop development pair](results/terminal-bench-4.0-gpt6-luna-mit
 preserve the measured boundary; neither supplies a success-qualified
 efficiency index.
 
+The [GPT-6 Luna + Mithril + Jev interleaved trial](results/terminal-bench-4.0-gpt6-luna-mithril-jev-v7/report.md)
+records 39 metered Jev decisions on the pinned railway task. It retained the
+same 9/13 partial result as the Luna + Mithril reference; its success-qualified
+indices are null.
+
 ## AA-Briefcase-Lite exploratory cohort
 
 `results/aa-briefcase-lite-w1-t1-gpt6-luna-v1/` records one retrospective

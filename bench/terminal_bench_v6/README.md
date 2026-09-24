@@ -15,3 +15,9 @@ This implementation reasons over source class inheritance and observed class evi
 The v6 development trial documented in the result report remained at 9/13 and spent substantially more tokens than v5c. Keep v6 experimental; prefill and class entailment alone did not resolve query semantics.
 
 Use the v4 Podman/Harbor setup with `PYTHONPATH` pointed at this directory, `BENCH_RUN_ROOT` outside the repo, `MITHRIL_CLASSPATH` from the Mithril runtime, and a shared `BENCH_MAX_STEPS`. Import `agent:MithrilDomainPrefillAgent` for the Mithril lane. The `HermesBaselineAgent` remains the v5 baseline implementation.
+
+## Jev interleaved development lane
+
+Import `jev_interleave:MithrilJevInterleavedAgent` to run the same v6 loop with a TypeSafe Jev decision before each Luna terminal action. Set `OPENROUTER_API_KEY` through the existing credential environment. The runner refuses a missing key, unexpected model, candidate mismatch, or incomplete usage receipt. Jev receives the prefilled task goals, constraints, source ontology terms, and latest observation, then chooses one of six fixed, falsifiable investigation priorities. A choice with confidence below 0.6 is recorded but not added to the next Luna prompt. The threshold is an uncalibrated experimental setting for this railway task, not a general admission policy.
+
+Jev does not author commands or RDF rules in this lane. Every terminal action still calls Luna, so this experiment measures whether typed prioritization improves verifier outcome enough to justify its extra calls. Count Jev input/output tokens and billed cost alongside all Luna calls, and compare success before token, cost, or wall ratios. Raw decisions and task traces stay in `BENCH_RUN_ROOT`; public results include aggregate usage and verifier evidence only.
