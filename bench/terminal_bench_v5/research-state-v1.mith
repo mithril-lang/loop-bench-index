@@ -1,0 +1,10 @@
+(mithril/ontology
+ :id "https://mithril.fund/id/ontology/terminal-research-state-v1"
+ :profile ["https://www.w3.org/TR/rdf11-concepts/" "https://www.w3.org/TR/owl2-profiles/#OWL_2_RL" "https://www.w3.org/TR/shacl/"]
+ :graph
+ [(owl/class :id "https://mithril.fund/id/class/ResearchState")
+  (owl/class :id "https://mithril.fund/id/class/HypothesisState" :rdfs/sub-class-of "https://mithril.fund/id/class/ResearchState")
+  (owl/class :id "https://mithril.fund/id/class/ExperimentState" :rdfs/sub-class-of "https://mithril.fund/id/class/ResearchState")
+  (owl/class :id "https://mithril.fund/id/class/ReflectionState" :rdfs/sub-class-of "https://mithril.fund/id/class/ResearchState")
+  (owl/class :id "https://mithril.fund/id/class/VerificationState" :rdfs/sub-class-of "https://mithril.fund/id/class/ResearchState")
+  (owl/class :id "https://mithril.fund/id/class/CompleteState" :rdfs/sub-class-of "https://mithril.fund/id/class/ResearchState")])
