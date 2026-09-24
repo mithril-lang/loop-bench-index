@@ -12,4 +12,17 @@
              :agent-turns 49.18032786885246}
    :unmeasured [:mithril-reasoning-tokens :hermes-effects]
    :report "readonly-git-status-v1/report.edn"
-   :receipts "readonly-git-status-v1/receipts.edn"}]}
+   :receipts "readonly-git-status-v1/receipts.edn"}
+  {:corpus-id "readonly-git-status-v2"
+   :comparison-mode :stack
+   :models {:hermes "openai/gpt-4o-mini" :mithril "typesafe/jev-1.13"}
+   :runs 30 :successful-runs 28
+   :paired-runs 15 :equivalent-pairs 13 :equivalence-coverage 0.8666666666666667
+   :indices {:tokens 18.725332961439232
+             :cost-usd 16.435130379139334
+             :wall-ms 145.94759997552035
+             :agent-turns 100}
+   :unmeasured [:mithril-reasoning-tokens :hermes-effects]
+   :notes ["Both non-equivalent pairs were held before git-status at the Mithril confidence floor."]
+   :report "readonly-git-status-v2/report.edn"
+   :receipts "readonly-git-status-v2/receipts.edn"}]}

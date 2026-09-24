@@ -1,0 +1,6 @@
+{:corpus-id "readonly-git-status-v2"
+ :benchmark-implementation-commit "6f95c5d622e7085596e8f8c4451f35ecd1a0509f"
+ :landed-mithril-merge-commit "31539e1570b0e6f2478d4becbae5fffc4b2c893b"
+ :comparison-mode :stack
+ :notes ["Hermes command wrapper now returns the canonical EDN answer in one tool call."
+         "Mithril workflow can still stop before git-status; two low-confidence stops were held by policy."]}
