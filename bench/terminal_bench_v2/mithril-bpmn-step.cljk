@@ -1,0 +1,45 @@
+(ns terminal-bench.mithril-bpmn-step
+  (:require [cljs.reader :as reader]
+            [mithril.bpmn :as bpmn]
+            [mithril.compiler :as compiler]))
+
+(def fs (js/require "node:fs"))
+
+(defn read-text [path] (.readFileSync fs path "utf8"))
+(defn emit! [x] (println (.stringify js/JSON (clj->js x))))
+(defn persist! [path runtime]
+  (.writeFileSync fs path (pr-str (select-keys runtime [:token-state :pending]))))
+
+(let [[profile-path state-path operation action-id outcome] *command-line-args*]
+  (try
+    (let [profile (compiler/parse-source (read-text profile-path))
+          process-doc (get profile "process")
+          action-ids (get-in profile ["policy" "actions"])
+          action-by-id (into {} (map (fn [id] [id {:id id}]) action-ids))
+          process (bpmn/compile-process process-doc action-by-id action-ids false)
+          start (bpmn/start-state process)
+          prior (when (.existsSync fs state-path)
+                  (reader/read-string (read-text state-path)))
+          runtime (if prior (merge start prior) start)
+          result
+          (case operation
+            "enabled" (do
+                        (emit! {:actions (bpmn/enabled-action-ids runtime)
+                                :completed (bpmn/completed? runtime)})
+                        nil)
+            "select" (let [selected (bpmn/select-action runtime action-id)]
+                       (persist! state-path selected)
+                       (emit! {:pending action-id
+                               :enabled (bpmn/enabled-action-ids selected)})
+                       nil)
+            "complete" (let [completed (bpmn/apply-outcome runtime action-id (= "true" outcome))]
+                         (persist! state-path completed)
+                         (emit! {:enabled (bpmn/enabled-action-ids completed)
+                                 :completed (bpmn/completed? completed)})
+                         nil)
+            (throw (ex-info "unknown operation" {:operation operation})))]
+      result)
+    (catch :default e
+      (emit! {:error (or (.-message e) (str e))
+              :code (some-> e .-data (aget "mithril/error") str)})
+      (set! (.-exitCode js/process) 2))))
