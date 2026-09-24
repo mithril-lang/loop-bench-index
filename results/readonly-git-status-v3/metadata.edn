@@ -1,0 +1,7 @@
+{:corpus-id "readonly-git-status-v3"
+ :benchmark-implementation-commit "1f1ce106b964ee6779f67796aaea1bb12ce5d70f"
+ :mithril-profile-digest "sha256:01904d6c9db29c1f7632e1d8851d7084ba510c8f2ec711ce621c51a31310b911"
+ :comparison-mode :stack
+ :notes ["BPMN requires workspace-inspect, then git-status, then stop."
+         "All 15 Mithril runs resolved only-singleton choices without model calls."
+         "Aggregate Mithril/Hermes wall-time index is 218.31; the runner includes repeated kbb process starts."]}

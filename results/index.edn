@@ -2,27 +2,43 @@
  :definition "100 is the Hermes baseline; values are Mithril/Hermes multiplied by 100. Lower resource ratios mean less usage for parity-qualified pairs."
  :cohorts
  [{:corpus-id "readonly-git-status-v1"
+   :corpus-digest "sha256:4965570703de48f4f90ecb4a4aeaa59004ab747e313a3e731400336fc8530e4b"
+   :runner-revision :not-captured-at-run-time
    :comparison-mode :stack
-   :models {:hermes "openai/gpt-4o-mini" :mithril "typesafe/jev-1.13"}
+   :lanes {:hermes {:requested-model "openai/gpt-4o-mini" :resolved-models ["openai/gpt-4o-mini"] :runs 15 :successful-runs 7}
+           :mithril {:requested-model "typesafe/jev-1.13" :resolved-models ["typesafe/jev-1.13-20260917"] :runs 15 :successful-runs 15}}
    :runs 30 :successful-runs 22
    :paired-runs 15 :equivalent-pairs 7 :equivalence-coverage 0.4666666666666667
-   :indices {:tokens 9.313433839224189
-             :cost-usd 9.110399568167042
-             :wall-ms 59.19042072084418
-             :agent-turns 49.18032786885246}
+   :indices {:tokens 9.313433839224189 :cost-usd 9.110399568167042
+             :wall-ms 59.19042072084418 :agent-turns 49.18032786885246}
    :unmeasured [:mithril-reasoning-tokens :hermes-effects]
    :report "readonly-git-status-v1/report.edn"
    :receipts "readonly-git-status-v1/receipts.edn"}
   {:corpus-id "readonly-git-status-v2"
+   :corpus-digest "sha256:719958e5cee78dcfffb0fd3e40deaf064ad7c420e417e6131167b0a15021144d"
+   :runner-revision "31539e1570b0e6f2478d4becbae5fffc4b2c893b"
    :comparison-mode :stack
-   :models {:hermes "openai/gpt-4o-mini" :mithril "typesafe/jev-1.13"}
+   :lanes {:hermes {:requested-model "openai/gpt-4o-mini" :resolved-models ["openai/gpt-4o-mini"] :runs 15 :successful-runs 15}
+           :mithril {:requested-model "typesafe/jev-1.13" :resolved-models ["typesafe/jev-1.13-20260917"] :runs 15 :successful-runs 13}}
    :runs 30 :successful-runs 28
    :paired-runs 15 :equivalent-pairs 13 :equivalence-coverage 0.8666666666666667
-   :indices {:tokens 18.725332961439232
-             :cost-usd 16.435130379139334
-             :wall-ms 145.94759997552035
-             :agent-turns 100}
+   :indices {:tokens 18.725332961439232 :cost-usd 16.435130379139334
+             :wall-ms 145.94759997552035 :agent-turns 100}
    :unmeasured [:mithril-reasoning-tokens :hermes-effects]
    :notes ["Both non-equivalent pairs were held before git-status at the Mithril confidence floor."]
    :report "readonly-git-status-v2/report.edn"
-   :receipts "readonly-git-status-v2/receipts.edn"}]}
+   :receipts "readonly-git-status-v2/receipts.edn"}
+  {:corpus-id "readonly-git-status-v3"
+   :corpus-digest "sha256:a0a428bdc54f1656d90336116e90797b44a3f72a26e656ed49a03b7344ac6e35"
+   :runner-revision "1f1ce106b964ee6779f67796aaea1bb12ce5d70f"
+   :comparison-mode :stack
+   :lanes {:hermes {:requested-model "openai/gpt-4o-mini" :resolved-models ["openai/gpt-4o-mini"] :runs 15 :successful-runs 15}
+           :mithril {:requested-model "typesafe/jev-1.13" :resolved-models ["deterministic/ontology-bpmn"] :runs 15 :successful-runs 15}}
+   :runs 30 :successful-runs 30
+   :paired-runs 15 :equivalent-pairs 15 :equivalence-coverage 1
+   :indices {:tokens 0 :cost-usd 0 :wall-ms 218.31097336725 :agent-turns 0}
+   :unmeasured [:mithril-reasoning-tokens :hermes-effects]
+   :notes ["Mithril is a deterministic ontology/BPMN path with zero model calls."
+           "This is a stack comparison, not a same-model causal loop comparison."]
+   :report "readonly-git-status-v3/report.edn"
+   :receipts "readonly-git-status-v3/receipts.edn"}]}

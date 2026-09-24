@@ -1,10 +1,10 @@
 {:format "https://mithril.fund/bench-index/cohort-v1"
- :identity-keys [:cohort-id :corpus-digest :runner-revision]
- :lane-keys [:requested-model :resolved-model :runs :successful-runs]
- :comparison-keys [:mode :paired-runs :comparable-pairs :equivalent-pairs
+ :identity-keys [:corpus-id :corpus-digest :runner-revision :comparison-mode]
+ :lane-keys [:requested-model :resolved-models :runs :successful-runs]
+ :comparison-keys [:comparison-mode :paired-runs :comparable-pairs :equivalent-pairs
                    :equivalence-coverage :indices]
  :receipt-keys [:run-id :case-id :lane :task-digest :requested-model
-                 :resolved-model :success? :observed-outcome :usage :wall-ms]
+                 :model :success? :observed-outcome :usage :wall-ms]
  :index-definition "100 is the Hermes baseline; index values are Mithril/Hermes multiplied by 100"
  :parity-gate :exact-predeclared-outcome
  :missing-usage :unmeasured

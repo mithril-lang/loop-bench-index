@@ -19,6 +19,11 @@ endpoint and report the same resolved model.
 - `src/loop_bench_index.cljc` validates a report and projects a compact index
   row. It does not repair or infer missing provider measurements.
 
+Call `index-row` with the report plus `{:receipts receipts :runner-revision
+<commit>}` to include per-lane resolved model identities and run counts. The
+recorded `results/index.edn` follows that shape and links each cohort to its
+full report and receipts.
+
 To add a cohort, retain its predeclared plan, all run receipts, full report,
 runner revision, Hermes version, and Mithril revision. Do not publish indices
 for pairs without exact expected-result parity. The denominator and eligible
