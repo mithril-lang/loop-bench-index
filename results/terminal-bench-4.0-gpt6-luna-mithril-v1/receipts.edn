@@ -1,0 +1,29 @@
+{:format "https://mithril.fund/bench/agent-efficiency-pair-v1"
+ :comparison-mode :same-model
+ :cases 3
+ :replicates-per-lane 1
+ :pairs [{:case-id "ontology-kg-querying"
+           :task-checksum "sha256:36696def4524165e9caad8f162fb58f8a37f5769ca192139b724d2493648345d"
+           :outcome-parity? false
+           :hermes {:reward 0.0 :passed? false :model-calls 20 :total-tokens 565919 :estimated-cost-usd 0.078377875 :agent-wall-ms 429443}
+           :mithril {:reward 0.0 :passed? false :model-calls 20 :total-tokens 498914 :estimated-cost-usd 0.06787975 :agent-wall-ms 396877}
+           :raw-mithril-over-hermes-percent {:tokens 88.16 :estimated-cost-usd 86.60 :agent-wall-time 92.42}}
+          {:case-id "react-lead-form"
+           :task-checksum "sha256:451180b96855fd885a487a44f2d3fe393adefe8e4d16da7759c0b58b8452e838"
+           :outcome-parity? false
+           :hermes {:reward 0.0 :passed? false :model-calls 20 :total-tokens 329669 :estimated-cost-usd 0.047021125 :agent-wall-ms 281785}
+           :mithril {:reward 0.0 :passed? false :model-calls 20 :total-tokens 461635 :estimated-cost-usd 0.0677 :agent-wall-ms 610244}
+           :raw-mithril-over-hermes-percent {:tokens 140.04 :estimated-cost-usd 144.00 :agent-wall-time 216.58}}
+          {:case-id "interleaved-vigenere"
+           :task-checksum "sha256:64903b3624efa989494a48c378e8301b10342bae0ceeedb33bbadd3375d684d1"
+           :outcome-parity? false
+           :hermes {:reward 0.0 :passed? false :model-calls 12 :total-tokens 118207 :estimated-cost-usd 0.0201716 :agent-wall-ms 365450}
+           :mithril {:reward 0.0 :passed? false :model-calls 12 :total-tokens 73084 :estimated-cost-usd 0.0138506 :agent-wall-ms 449669}
+           :raw-mithril-over-hermes-percent {:tokens 61.83 :estimated-cost-usd 68.66 :agent-wall-time 123.05}}]
+ :aggregate {:hermes {:total-tokens 1013795 :estimated-cost-usd 0.1455706 :agent-wall-ms 1076678}
+             :mithril {:total-tokens 1033633 :estimated-cost-usd 0.14943035 :agent-wall-ms 1456790}
+             :raw-mithril-over-hermes-percent {:tokens 101.96 :estimated-cost-usd 102.65 :agent-wall-time 135.35}}
+ :indices {:tokens nil :estimated-cost-usd nil :agent-wall-time nil}
+ :index-eligibility :none
+ :unmeasured [:provider-invoice-cost :replicated-variance :official-leaderboard-score :quality-equivalence]
+ :cost-source :hermes-provider-models-api-estimate}

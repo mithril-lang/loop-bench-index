@@ -1,0 +1,26 @@
+{:format "https://mithril.fund/bench/agent-loop-plan-v2"
+ :corpus-id "terminal-bench-4.0-gpt6-luna-mithril-v1"
+ :comparison-mode :same-model
+ :mode :exploratory
+ :case-count 3
+ :replicates 1
+ :models {:hermes "openai/gpt-6-luna" :mithril "openai/gpt-6-luna"}
+ :provider "openrouter via Hermes CLI"
+ :reasoning-effort :medium
+ :benchmark {:name "Terminal-Bench" :version "4.0.0"
+             :source-commit "452bf305c6daa62fc59061d22133a7cbc7c1572e"
+             :harness "Harbor 0.1.43"}
+ :tasks [{:case-id "ontology-kg-querying" :task-checksum "sha256:36696def4524165e9caad8f162fb58f8a37f5769ca192139b724d2493648345d" :step-limit 20}
+          {:case-id "react-lead-form" :task-checksum "sha256:451180b96855fd885a487a44f2d3fe393adefe8e4d16da7759c0b58b8452e838" :step-limit 20}
+          {:case-id "interleaved-vigenere" :task-checksum "sha256:64903b3624efa989494a48c378e8301b10342bae0ceeedb33bbadd3375d684d1" :step-limit 12}]
+ :runner {:sha256 "dce6d6dbfb23b44af7bea4e4e259154ea8d944c3be0c7d48c9e7c5036a82a3ee"
+          :mithril-runtime-commit "1714d7c6d02fb37d5315f3e62daa4d4407eac84e"
+          :ontology-source-sha256 "1995a502e3dcca51a84e6b82a7ea095b3b0bbd11447d2c9054de7dff97e9fd3a"
+          :process-source-sha256 "a4ee4a6ee2085050b25cf77716aa0f7bf65447b9980cee1dcb679f9920cfd2ca"
+          :compiled-ontology-sha256 "f98ca91638c7b5da260e53f88aae2273fc3ba42247384c3d56436d379d505113"
+          :compiled-graph-digest "sha256:403c23925ff2a8b89183f88c577b07c3006208306903931fad39cf97bf08ce0a"}
+ :predeclared-before-run? false
+ :notes ["The first two task pairs used a 20-step shared action loop; the Vigenere pair used a later 12-step cohort with repeated-inspect suppression and bounded-command timeout receipts."
+         "Each lane used one shell command per model response; model-generated commands ran only inside the Harbor task container."
+         "The Mithril lane additionally advanced typed inspect/modify/verify/finish actions through the compiled BPMN process."
+         "This custom agent harness is not an official Terminal-Bench leaderboard submission."]}

@@ -79,7 +79,7 @@ boundaries:
 | Fixed, read-only Git status | 15/15 exact outcomes in v3 | Demonstrated for this corpus |
 | Bounded `.mith` coding task | Clean-clone proposal timed out at 180 s | Attempted, not solved |
 | AA-Briefcase-Lite business analysis and office deliverables | No run; present canary catalog has no verified PDF/XLSX/PPTX/video workflow | Unverified / no demonstrated support |
-| Terminal-Bench 4.0 general terminal tasks | No official task run; the tested read-only loop exposes a fixed Git-status path | Unverified / not benchmarked |
+| Terminal-Bench 4.0 task families | Three custom Harbor task pairs (`ontology-kg-querying`, `react-lead-form`, `interleaved-vigenere`); all six trials received verifier reward 0.0 and no pair qualified for an efficiency index | Attempted, not solved; see [paired probe report](terminal-bench-4.0-gpt6-luna-mithril-v1/report.md) |
 | HLE, AA-Omniscience, and other open-ended reasoning tasks | No run; no task-family accuracy corpus or matched inference path in this probe | Unverified / no general-reasoning claim |
 
 The current `readonly-canary` is a closed workflow: inspect workspace, run Git
