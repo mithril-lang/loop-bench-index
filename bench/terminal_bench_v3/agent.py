@@ -85,7 +85,8 @@ class LoopAgent(BaseAgent):
                     enabled_state=await self.mith('enabled')
                     enabled=enabled_state.get('actions',[])
                     if enabled_state.get('completed'): break
-                else: enabled=['inspect','modify','verify','finish']
+                else: enabled=[f'https://mithril.fund/id/action/terminal/{kind}'
+                               for kind in ['finish','inspect','modify','verify']]
                 action=await self.query(instruction,enabled)
                 kind=action['action']; cmd=action['command']
                 if kind=='finish':

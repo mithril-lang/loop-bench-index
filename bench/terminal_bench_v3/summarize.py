@@ -26,6 +26,13 @@ def trial_row(path):
     agent = trial.get("agent_result") or {}
     meta = agent.get("metadata") or {}
     error = trial.get("exception_info")
+    usages = []
+    for usage_file in meta.get("usage_files", []):
+        try:
+            usages.append(json.loads(Path(usage_file).read_text()))
+        except (ValueError, OSError):
+            pass
+    usage_complete = len(usages) == meta.get("hermes_calls", -1) and len(usages) > 0
     verifier_stdout = path.parent / "verifier" / "test-stdout.txt"
     output = verifier_stdout.read_text(errors="replace") if verifier_stdout.exists() else ""
     infrastructure_failure = any(marker in output for marker in (
@@ -41,7 +48,7 @@ def trial_row(path):
         except (ValueError, OSError, TypeError):
             pass
     # Other verifier formats need an explicit per-task audit before inclusion.
-    measured = not error and rewards and meta.get("hermes_calls", 0) > 0 and not infrastructure_failure and executed_tests > 0
+    measured = not error and rewards and usage_complete and not infrastructure_failure and executed_tests > 0
     return {
         "task_id": trial.get("task_name"),
         "task_checksum": trial.get("task_checksum"),
@@ -50,15 +57,17 @@ def trial_row(path):
         "status": "scored" if measured else "unmeasured",
         "reward": rewards.get("reward") if measured else None,
         "model_calls": meta.get("hermes_calls"),
+        "provider_api_calls": sum(u.get("api_calls", 0) for u in usages) if usage_complete else None,
         "steps": meta.get("step_count"),
         "semantic_receipts": meta.get("semantic_receipts"),
         "verifier_tests_executed": executed_tests,
         "input_tokens": agent.get("n_input_tokens") if measured else None,
         "output_tokens": agent.get("n_output_tokens") if measured else None,
+        "reasoning_tokens": sum(u.get("reasoning_tokens", 0) or 0 for u in usages) if measured else None,
         "cache_tokens": agent.get("n_cache_tokens") if measured else None,
         "estimated_cost_usd": agent.get("cost_usd") if measured else None,
         "agent_wall_seconds": seconds(trial.get("agent_execution")) if measured else None,
-        "failure_class": "verifier-dependency-missing" if infrastructure_failure else ((error or {}).get("exception_type") if error else (None if measured else "verifier-evidence-missing")),
+        "failure_class": "verifier-dependency-missing" if infrastructure_failure else ((error or {}).get("exception_type") if error else (None if measured else ("usage-receipt-missing" if not usage_complete else "verifier-evidence-missing"))),
     }
 
 
