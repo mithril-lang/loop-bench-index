@@ -86,3 +86,17 @@ memory. All 66 use a separate verifier environment; the local Podman adapter
 has already failed to provision `pytest` for two task families. The 57 are a
 resource filter, **not** 57 valid scored tasks. Oracle-positive verifier
 controls and actual task resource checks are required before inclusion.
+
+## Bounded-history follow-up
+
+The v4 one-task diagnostic reduced the replayed history character count by
+about 89%, but both 24-call lanes remained in `inspect` and failed to create
+the required artifact. The Mithril lane spent 147.187 s in semantic helper
+processes. The [v4 report](terminal-bench-4.0-gpt6-luna-mithril-v4/report.md)
+records the full measured/invalid split. A history window alone is rejected.
+The next optimization candidate is a compact, typed task-state projection
+with exact source receipts, plus one OWL closure per pinned ontology digest
+and incremental validation of changed action facts. Before reporting token
+or wall gains, require verifier coverage at least as strong as the v3
+development trial and an oracle-positive control on each task. Keep the
+same-model baseline and Mithril lanes on the same prompt/state policy.
