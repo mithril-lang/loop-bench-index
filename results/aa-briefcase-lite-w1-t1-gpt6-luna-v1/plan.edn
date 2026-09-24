@@ -1,0 +1,17 @@
+{:format "https://mithril.fund/bench/agent-loop-plan-v2"
+ :corpus-id "aa-briefcase-lite-w1-t1-gpt6-luna-v1"
+ :comparison-mode :same-model
+ :mode :exploratory-retrospective
+ :case-count 1
+ :replicates 1
+ :models {:hermes "openai/gpt-6-luna"
+          :mithril "openai/gpt-6-luna"}
+ :task "AA-Briefcase-Lite public example W1-T1 Market Structure Map"
+ :task-digest "sha256:9c81987ef22cea43c3eba7588d86321e2791122ac96e6c9ea11e7bf58abaf8d4"
+ :shared-evidence-digest "sha256:f40d46ffa17902be6b8f196d6c99782e59aabb10bd7d714863eb4dc9d51de157"
+ :ontology-digest "sha256:a1586eb6906fd714f23500884c50d0951520b65939e1f39d1bafba488e6759f8"
+ :predeclared-before-run? false
+ :notes ["Retrospective exploratory run; not a preregistered cohort."
+         "The Hermes lane used the same compact evidence pack and file-only capability."
+         "The Mithril lane used the same model via a constrained proposal wrapper plus compiled Mith ontology and BPMN action gates."
+         "Both outputs compiled to one-page A4 PDFs; visual review found overlapping/clipped labels, failing required render-integrity check A-02 in both lanes."]}

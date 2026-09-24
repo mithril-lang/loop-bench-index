@@ -1,0 +1,36 @@
+{:format "https://mithril.fund/bench/agent-loop-plan-v2"
+ :corpus-id "aa-briefcase-lite-w1-t1-gpt6-luna-v1"
+ :corpus-digest "sha256:f40d46ffa17902be6b8f196d6c99782e59aabb10bd7d714863eb4dc9d51de157"
+ :runner-revision "exploratory-wrapper-uncommitted-2026-09-24"
+ :comparison-mode :same-model
+ :models {:hermes "openai/gpt-6-luna" :mithril "openai/gpt-6-luna"}
+ :runs 2
+ :successful-runs 2
+ :paired-comparison {:format "https://mithril.fund/metric/agent-efficiency-pair-v1"
+                     :comparison-mode :same-model
+                     :cases 1
+                     :comparable-cases 0
+                     :equivalent-cases 0
+                     :exact-outcome-parity 0
+                     :equivalence-coverage 0.0
+                     :indices {:tokens nil :reasoning-tokens nil :cost-usd nil :wall-ms nil :agent-turns nil}
+                     :resource-observations {:hermes {:total-tokens 293653 :estimated-cost-usd 0.021902725 :model-call-wall-ms 253653 :api-calls 17}
+                                             :mithril {:total-tokens 27053 :estimated-cost-usd 0.00707605 :full-run-wall-ms 195257 :api-calls 1}}
+                     :unmeasured [:full-hermes-wall-ms :invoice-cost :complete-rubric-score :reasoning-quality-equivalence]
+                     :pairs [{:case-id "W1-T1"
+                              :comparable? false
+                              :outcome-equivalent? false
+                              :same-task? true
+                              :same-model? true
+                              :comparison-mode :same-model
+                              :indices {:tokens nil :cost-usd nil :wall-ms nil}
+                              :reason "Both compiled, but both failed visual render-integrity gate W1-T1-A-02; full task outcome parity is not established."
+                              :raw {:hermes {:usage {:total-tokens 293653 :cost-usd 0.021902725 :cost-status :estimated :api-calls 17}
+                                             :wall-ms 253653 :wall-scope :summed-model-calls :render-integrity-pass? false}
+                                    :mithril {:usage {:total-tokens 27053 :cost-usd 0.00707605 :cost-status :estimated :api-calls 1}
+                                              :wall-ms 195257 :wall-scope :full-mithril-run :render-integrity-pass? false}}}]}
+ :notes ["Exploratory retrospective single task, one run per lane; do not interpret as AA leaderboard or Intelligence Index score."
+         "Raw resource observations are not parity-qualified indices."
+         "Both providers were OpenRouter; costs are estimated from model pricing metadata, not provider invoices."
+         "Mithril used compiled market ontology, semantic checkpointing, and bounded BPMN action/effect gates; GPT-6 Luna generated the substantive diagram."
+         "A failed earlier compatibility run and an excluded unmeasured baseline attempt are omitted from the successful paired resource totals."]}

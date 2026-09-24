@@ -1,0 +1,5 @@
+{:title "AA-Briefcase-Lite W1-T1 GPT-6 Luna exploratory comparison"
+ :task "Market Structure Map"
+ :result "non-parity; no efficiency index eligible"
+ :scope "one public example task, one run per lane"
+ :source "https://huggingface.co/datasets/ArtificialAnalysis/AA-Briefcase-Lite"}

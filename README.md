@@ -32,3 +32,16 @@ pair count accompany each aggregate.
 External task-family probes are kept separately from paired resource indices.
 They are not official benchmark scores and do not enter `results/index.edn`:
 see [the 2026-09-24 probe report](results/external-task-probes-2026-09-24.md).
+
+## AA-Briefcase-Lite exploratory cohort
+
+`results/aa-briefcase-lite-w1-t1-gpt6-luna-v1/` records one retrospective
+same-model comparison on the public W1-T1 Market Structure Map task. Both lanes
+used GPT-6 Luna through OpenRouter; the Mithril lane additionally used a compiled
+market ontology and bounded BPMN action/effect gates. This is not an Artificial
+Analysis leaderboard result or Intelligence Index score. Both PDFs compiled to
+one page, but both failed the task's visual render-integrity check (overlap or
+clipping), so the outcomes are not parity-qualified and the index values remain
+null. Raw token, estimated cost, and available wall measurements are preserved
+with their different timing scopes explicitly labeled. The remaining rubric
+checks were not scored; the cohort is exploratory and not preregistered.
