@@ -1,0 +1,94 @@
+(ns terminal-bench.mithril-bpmn-step
+  (:require [cljs.reader :as reader]
+            [clojure.string :as str]
+            [mithril.bpmn :as bpmn]
+            [mithril.compiler :as compiler]
+            [mithril.execution :as execution]
+            [oak.semantic :as oak]))
+
+(def fs (js/require "node:fs"))
+
+(defn read-text [path] (.readFileSync fs path "utf8"))
+(defn emit! [x] (println (.stringify js/JSON (clj->js x))))
+(defn persist! [path runtime]
+  (.writeFileSync fs path (pr-str (select-keys runtime [:token-state :pending :semantic-receipts]))))
+
+(def path-api (js/require "node:path"))
+(def action-root "https://mithril.fund/id/action/terminal/")
+(def class-root "https://mithril.fund/id/class/")
+(def proposed-class (str class-root "ProposedAction"))
+(def action-shape
+  {:shacl/type :node-shape
+   :target-class :mithril/ProposedAction
+   :property [{:path :actionKind :datatype :string :min-count 1 :max-count 1}
+              {:path :commandText :datatype :string :min-count 1 :max-count 1}]})
+
+(defn semantic-check! [ontology action-id command]
+  (let [kind (str/replace action-id action-root "")
+        class-id (str class-root (str/capitalize kind) "Action")
+        nodes (get-in ontology [:rdf-dataset "@graph"])
+        classes (into {} (map (juxt #(get % "@id") identity)) nodes)
+        parent (get-in classes [class-id "subClassOf"])
+        proposal {:actionKind action-id :commandText command}
+        report (execution/validate-shape action-shape proposal)
+        axioms (set (for [node nodes :when (get node "subClassOf")]
+                      (oak/triple (get node "@id") :rdfs/subClassOf (get node "subClassOf"))))
+        triples (conj axioms (oak/triple action-id :rdf/type class-id))
+        inferred (oak/materialize :owl2-rl triples)
+        expected (oak/triple action-id :rdf/type proposed-class)
+        rows (oak/execute :owl2-rl
+                          [:sparql/project [:?candidate]
+                           [:sparql/bgp [:?candidate :rdf/type proposed-class]]]
+                          triples)]
+    (when-not (and (= parent proposed-class) (:valid? report)
+                   (contains? inferred expected)
+                   (seq rows))
+      (throw (ex-info "ontology did not admit proposed action"
+                      {:mithril/error :terminal-bench/semantic-refusal
+                       :action action-id :shape-report report})))
+    {:operation "infer/owl2-rl+query/sparql+validate/shacl"
+     :action action-id :entailed true :query-rows (count rows)
+     :shape-violations (count (:errors report))}))
+
+(let [[profile-path state-path operation action-id outcome] *command-line-args*]
+  (try
+    (let [profile (compiler/parse-source (read-text profile-path))
+          ontology-path (.join path-api (.dirname path-api profile-path) "terminal-actions-v2.mith")
+          process-doc (get profile "process")
+          action-ids (get-in profile ["policy" "actions"])
+          action-by-id (into {} (map (fn [id] [id {:id id}]) action-ids))
+          process (bpmn/compile-process process-doc action-by-id action-ids false)
+          start (bpmn/start-state process)
+          prior (when (.existsSync fs state-path)
+                  (reader/read-string (read-text state-path)))
+          runtime (if prior (merge start prior) start)
+          result
+          (case operation
+            "enabled" (do
+                        (emit! {:actions (bpmn/enabled-action-ids runtime)
+                                :completed (bpmn/completed? runtime)})
+                        nil)
+            "select" (let [ontology (compiler/compile-ontology-text ontology-path (read-text ontology-path))
+                           ontology-digest (str/replace (:graph-digest ontology) "sha256:" "")
+                           _ (when-not (= ontology-digest (get profile "ontology"))
+                               (throw (ex-info "ontology/profile digest mismatch"
+                                               {:mithril/error :terminal-bench/ontology-digest-mismatch})))
+                           semantic (semantic-check! ontology action-id outcome)
+                           selected (-> (bpmn/select-action runtime action-id)
+                                        (update :semantic-receipts (fnil conj []) semantic))]
+                       (persist! state-path selected)
+                       (emit! {:pending action-id
+                               :enabled (bpmn/enabled-action-ids selected)
+                               :semantic semantic})
+                       nil)
+            "complete" (let [completed (bpmn/apply-outcome runtime action-id (= "true" outcome))]
+                         (persist! state-path completed)
+                         (emit! {:enabled (bpmn/enabled-action-ids completed)
+                                 :completed (bpmn/completed? completed)})
+                         nil)
+            (throw (ex-info "unknown operation" {:operation operation})))]
+      result)
+    (catch :default e
+      (emit! {:error (or (.-message e) (str e))
+              :code (some-> e .-data (aget "mithril/error") str)})
+      (set! (.-exitCode js/process) 2))))
