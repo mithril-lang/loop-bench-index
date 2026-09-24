@@ -34,6 +34,11 @@ They are not official benchmark scores and do not enter `results/index.edn`:
 see [the 2026-09-24 probe report](results/external-task-probes-2026-09-24.md)
 and [the Terminal-Bench 4.0 GPT-6 Luna paired probe](results/terminal-bench-4.0-gpt6-luna-mithril-v1/report.md).
 
+The [2026-09-24 benchmark redesign](results/benchmark-redesign-2026-09-24.md)
+audits false zero rewards caused by missing verifier dependencies and defines
+the repeated, oracle-controlled measurement path. Versioned Terminal-Bench
+runners live under `bench/terminal_bench_v2/` and `bench/terminal_bench_v3/`.
+
 ## AA-Briefcase-Lite exploratory cohort
 
 `results/aa-briefcase-lite-w1-t1-gpt6-luna-v1/` records one retrospective

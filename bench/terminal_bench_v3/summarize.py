@@ -32,7 +32,16 @@ def trial_row(path):
         "No module named pytest", "pytest: command not found",
         "ModuleNotFoundError: No module named 'pytest'",
     ))
-    measured = not error and rewards and meta.get("hermes_calls", 0) > 0 and not infrastructure_failure
+    ctrf_path = path.parent / "verifier" / "ctrf.json"
+    executed_tests = 0
+    if ctrf_path.exists():
+        try:
+            ctrf = json.loads(ctrf_path.read_text())
+            executed_tests = int(ctrf.get("results", {}).get("summary", {}).get("tests", 0))
+        except (ValueError, OSError, TypeError):
+            pass
+    # Other verifier formats need an explicit per-task audit before inclusion.
+    measured = not error and rewards and meta.get("hermes_calls", 0) > 0 and not infrastructure_failure and executed_tests > 0
     return {
         "task_id": trial.get("task_name"),
         "task_checksum": trial.get("task_checksum"),
@@ -42,12 +51,14 @@ def trial_row(path):
         "reward": rewards.get("reward") if measured else None,
         "model_calls": meta.get("hermes_calls"),
         "steps": meta.get("step_count"),
+        "semantic_receipts": meta.get("semantic_receipts"),
+        "verifier_tests_executed": executed_tests,
         "input_tokens": agent.get("n_input_tokens") if measured else None,
         "output_tokens": agent.get("n_output_tokens") if measured else None,
         "cache_tokens": agent.get("n_cache_tokens") if measured else None,
         "estimated_cost_usd": agent.get("cost_usd") if measured else None,
         "agent_wall_seconds": seconds(trial.get("agent_execution")) if measured else None,
-        "failure_class": "verifier-dependency-missing" if infrastructure_failure else ((error or {}).get("exception_type") if error else None),
+        "failure_class": "verifier-dependency-missing" if infrastructure_failure else ((error or {}).get("exception_type") if error else (None if measured else "verifier-evidence-missing")),
     }
 
 
