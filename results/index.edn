@@ -41,4 +41,19 @@
    :notes ["Mithril is a deterministic ontology/BPMN path with zero model calls."
            "This is a stack comparison, not a same-model causal loop comparison."]
    :report "readonly-git-status-v3/report.edn"
-   :receipts "readonly-git-status-v3/receipts.edn"}]}
+   :receipts "readonly-git-status-v3/receipts.edn"}
+
+  {:corpus-id "aa-briefcase-lite-w1-t1-gpt6-luna-v1"
+   :corpus-digest "sha256:f40d46ffa17902be6b8f196d6c99782e59aabb10bd7d714863eb4dc9d51de157"
+   :runner-revision "exploratory-wrapper-uncommitted-2026-09-24"
+   :comparison-mode :same-model
+   :lanes {:hermes {:requested-model "openai/gpt-6-luna" :resolved-models ["openai/gpt-6-luna"] :runs 1 :successful-runs 1}
+           :mithril {:requested-model "openai/gpt-6-luna" :resolved-models ["openai/gpt-6-luna"] :runs 1 :successful-runs 1}}
+   :runs 2 :successful-runs 2
+   :paired-runs 1 :comparable-pairs 0 :equivalent-pairs 0 :equivalence-coverage 0.0
+   :indices {:tokens nil :cost-usd nil :wall-ms nil :agent-turns nil}
+   :unmeasured [:full-hermes-wall-ms :invoice-cost :complete-rubric-score :reasoning-quality-equivalence]
+   :notes ["Exploratory retrospective run; both artifacts failed W1-T1-A-02 visual integrity, so no resource index is eligible. Raw lane measurements are preserved in the report."]
+   :report "aa-briefcase-lite-w1-t1-gpt6-luna-v1/report.edn"
+   :receipts "aa-briefcase-lite-w1-t1-gpt6-luna-v1/receipts.edn"}
+ ]}

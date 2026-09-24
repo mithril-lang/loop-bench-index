@@ -1,0 +1,27 @@
+[{:run-id "aa-w1-t1-luna-hermes-v1"
+  :case-id "W1-T1"
+  :lane :hermes
+  :task-digest "sha256:9c81987ef22cea43c3eba7588d86321e2791122ac96e6c9ea11e7bf58abaf8d4"
+  :requested-model "openai/gpt-6-luna"
+  :model "openai/gpt-6-luna"
+  :provider "openrouter"
+  :success? true
+  :observed-outcome {:runner-completed? true :pdf-compiles? true :one-page? true :render-integrity-pass? false}
+  :quality {:W1-T1-A-02 :fail :remaining-rubric-checks :unscored}
+  :usage {:total-tokens 293653 :api-calls 17 :cost-usd 0.021902725 :cost-status :estimated}
+  :wall-ms 253653
+  :wall-scope :summed-model-calls}
+ {:run-id "aa-w1-t1-luna-mithril-v1"
+  :case-id "W1-T1"
+  :lane :mithril
+  :task-digest "sha256:9c81987ef22cea43c3eba7588d86321e2791122ac96e6c9ea11e7bf58abaf8d4"
+  :requested-model "openai/gpt-6-luna"
+  :model "openai/gpt-6-luna"
+  :provider "openrouter"
+  :success? true
+  :observed-outcome {:runner-completed? true :pdf-compiles? true :one-page? true :render-integrity-pass? false}
+  :quality {:W1-T1-A-02 :fail :remaining-rubric-checks :unscored}
+  :usage {:total-tokens 27053 :api-calls 1 :cost-usd 0.00707605 :cost-status :estimated}
+  :wall-ms 195257
+  :wall-scope :full-mithril-run}
+]
