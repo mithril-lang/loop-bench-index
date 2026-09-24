@@ -69,3 +69,10 @@ still a custom Hermes adapter, so its score must not be called an AA score.
 Qualification remains open until the predeclared cohort, valid verifier
 controls, and repeated outcomes exist. No speed, intelligence, or cost
 advantage is claimed from the admission trials.
+
+At source commit `452bf305c6daa62fc59061d22133a7cbc7c1572e`, a metadata
+scan finds 63 tasks declaring no GPU, of which 57 declare at most 8 GiB agent
+memory. All 66 use a separate verifier environment; the local Podman adapter
+has already failed to provision `pytest` for two task families. The 57 are a
+resource filter, **not** 57 valid scored tasks. Oracle-positive verifier
+controls and actual task resource checks are required before inclusion.

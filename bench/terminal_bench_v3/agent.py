@@ -1,4 +1,4 @@
-import asyncio, json, os, re, subprocess, time
+import asyncio, json, os, re, subprocess, time, uuid
 from pathlib import Path
 
 from harbor.agents.base import BaseAgent
@@ -13,6 +13,7 @@ PROFILE = ROOT / 'terminal-agent-loop-v2.mith'
 ONTOLOGY = ROOT / 'terminal-actions-v2.mith'
 RUN_ROOT = Path(os.environ.get('BENCH_RUN_ROOT', '/tmp/terminal-bench-v3'))
 MAX_STEPS = int(os.environ.get('BENCH_MAX_STEPS', '500'))
+REPEAT_ID = os.environ.get('BENCH_REPEAT_ID', 'development')
 
 class LoopAgent(BaseAgent):
     lane = 'baseline'
@@ -25,9 +26,10 @@ class LoopAgent(BaseAgent):
         self.calls=[]
         self.history=[]
         self.semantic_receipts=0
-        self.state=RUN_ROOT / 'state' / f'{self.lane}-{os.getpid()}-state.edn'
+        self.run_id=f'{self.lane}-{uuid.uuid4().hex[:16]}'
+        self.state=RUN_ROOT / 'state' / f'{self.run_id}-state.edn'
         self.state.parent.mkdir(parents=True, exist_ok=True)
-        self.usage_dir=RUN_ROOT / 'usage' / f'{self.lane}-{os.getpid()}'
+        self.usage_dir=RUN_ROOT / 'usage' / self.run_id
         self.usage_dir.mkdir(parents=True, exist_ok=True)
 
     async def shell(self, environment, command):
@@ -114,10 +116,10 @@ class LoopAgent(BaseAgent):
             context.n_cache_tokens=sm('cache_read_tokens')+sm('cache_write_tokens')
             costs=[u.get('estimated_cost_usd',u.get('cost_usd')) for u in usage]
             context.cost_usd=sum(c for c in costs if isinstance(c,(int,float))) if any(isinstance(c,(int,float)) for c in costs) else None
-            context.metadata={'lane':self.lane,'step_count':len(self.history),'hermes_calls':len(self.calls),'usage_files':[x['usage_file'] for x in self.calls],'wall_agent_seconds':round(time.time()-started,3),'mithril_ontology_sha256':__import__('hashlib').sha256(ONTOLOGY.read_bytes()).hexdigest() if self.lane=='mithril' else None,'semantic_receipts':self.semantic_receipts}
+            context.metadata={'lane':self.lane,'run_id':self.run_id,'repeat_id':REPEAT_ID,'step_count':len(self.history),'hermes_calls':len(self.calls),'usage_files':[x['usage_file'] for x in self.calls],'wall_agent_seconds':round(time.time()-started,3),'mithril_ontology_sha256':__import__('hashlib').sha256(ONTOLOGY.read_bytes()).hexdigest() if self.lane=='mithril' else None,'semantic_receipts':self.semantic_receipts}
         finally:
             (RUN_ROOT/'receipts').mkdir(parents=True,exist_ok=True)
-            (RUN_ROOT/'receipts'/f'{self.lane}-{os.getpid()}.json').write_text(json.dumps({'instruction_sha256':__import__('hashlib').sha256(instruction.encode()).hexdigest(),'actions':self.history,'calls':self.calls,'semantic_receipts':self.semantic_receipts},indent=2))
+            (RUN_ROOT/'receipts'/f'{self.run_id}.json').write_text(json.dumps({'instruction_sha256':__import__('hashlib').sha256(instruction.encode()).hexdigest(),'actions':self.history,'calls':self.calls,'semantic_receipts':self.semantic_receipts},indent=2))
 
 class HermesBaselineAgent(LoopAgent):
     lane='baseline'

@@ -54,6 +54,7 @@ def trial_row(path):
         "task_checksum": trial.get("task_checksum"),
         "trial_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "lane": meta.get("lane"),
+        "repeat_id": meta.get("repeat_id", "development"),
         "status": "scored" if measured else "unmeasured",
         "reward": rewards.get("reward") if measured else None,
         "model_calls": meta.get("hermes_calls"),

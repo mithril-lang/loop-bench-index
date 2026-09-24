@@ -19,6 +19,11 @@ official 66-task, three-repeat protocol and are not made here.
 Use the v2 README's environment setup, replacing `terminal_bench_v2` with
 `terminal_bench_v3`. Local `BENCH_RUN_ROOT` stores private task instructions and
 transcripts. Public reports contain only task identifiers and summary metrics.
+Run each predeclared repeat in a separate Harbor invocation with a shared
+`BENCH_REPEAT_ID` (for example `r1`) across the two lanes; do not rely on
+Harbor's `--n-attempts` to identify paired repeats. Each agent instance gets a
+fresh random state/usage directory so one trial cannot reuse another's BPMN
+token or model usage files.
 The summarizer marks known missing-verifier-dependency failures `unmeasured`;
 each scored trial also needs verifier execution evidence, since an emitted
 reward file alone can be a false score.
