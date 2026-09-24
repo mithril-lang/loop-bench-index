@@ -38,6 +38,10 @@ The [2026-09-24 benchmark redesign](results/benchmark-redesign-2026-09-24.md)
 audits false zero rewards caused by missing verifier dependencies and defines
 the repeated, oracle-controlled measurement path. Versioned Terminal-Bench
 runners live under `bench/terminal_bench_v2/` and `bench/terminal_bench_v3/`.
+The [v2 verifier-failure admission trial](results/terminal-bench-4.0-gpt6-luna-mithril-v2/report.md)
+and [v3 semantic-loop development pair](results/terminal-bench-4.0-gpt6-luna-mithril-v3/report.md)
+preserve the measured boundary; neither supplies a success-qualified
+efficiency index.
 
 ## AA-Briefcase-Lite exploratory cohort
 

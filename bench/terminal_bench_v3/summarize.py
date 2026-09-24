@@ -26,6 +26,7 @@ def trial_row(path):
     agent = trial.get("agent_result") or {}
     meta = agent.get("metadata") or {}
     error = trial.get("exception_info")
+    oracle = (trial.get("agent_info") or {}).get("name") == "oracle"
     usages = []
     for usage_file in meta.get("usage_files", []):
         try:
@@ -49,14 +50,15 @@ def trial_row(path):
             pass
     # Other verifier formats need an explicit per-task audit before inclusion.
     measured = not error and rewards and usage_complete and not infrastructure_failure and executed_tests > 0
+    control_valid = oracle and not error and rewards and not infrastructure_failure and executed_tests > 0
     return {
         "task_id": trial.get("task_name"),
         "task_checksum": trial.get("task_checksum"),
         "trial_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        "lane": meta.get("lane"),
+        "lane": "oracle-control" if oracle else meta.get("lane"),
         "repeat_id": meta.get("repeat_id", "development"),
-        "status": "scored" if measured else "unmeasured",
-        "reward": rewards.get("reward") if measured else None,
+        "status": ("control-pass" if rewards.get("reward") == 1.0 else "control-fail") if control_valid else ("scored" if measured else "unmeasured"),
+        "reward": rewards.get("reward") if measured or control_valid else None,
         "model_calls": meta.get("hermes_calls"),
         "provider_api_calls": sum(u.get("api_calls", 0) for u in usages) if usage_complete else None,
         "steps": meta.get("step_count"),
@@ -68,7 +70,7 @@ def trial_row(path):
         "cache_tokens": agent.get("n_cache_tokens") if measured else None,
         "estimated_cost_usd": agent.get("cost_usd") if measured else None,
         "agent_wall_seconds": seconds(trial.get("agent_execution")) if measured else None,
-        "failure_class": "verifier-dependency-missing" if infrastructure_failure else ((error or {}).get("exception_type") if error else (None if measured else ("usage-receipt-missing" if not usage_complete else "verifier-evidence-missing"))),
+        "failure_class": "verifier-dependency-missing" if infrastructure_failure else ((error or {}).get("exception_type") if error else (None if measured or control_valid else ("usage-receipt-missing" if not usage_complete and not oracle else "verifier-evidence-missing"))),
     }
 
 
