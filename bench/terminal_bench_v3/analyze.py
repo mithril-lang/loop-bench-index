@@ -31,8 +31,10 @@ def clustered_interval(rows, lane, seed=260924, draws=4000):
     rates = []
     for _ in range(draws):
         sample = [rng.choice(tasks) for _ in tasks]
-        trials = [r for task in sample for r in by_task[task]]
-        rates.append(sum(r["reward"] == 1.0 for r in trials) / len(trials))
+        rates.append(statistics.mean(
+            sum(r["reward"] == 1.0 for r in by_task[task]) / len(by_task[task])
+            for task in sample
+        ))
     return [percentile(rates, 0.025), percentile(rates, 0.975)]
 
 
@@ -47,14 +49,29 @@ def analyze(rows):
     scored = [r for r in rows if r["status"] == "scored"]
     if not scored:
         raise ValueError("no verifier-executed model trials")
+    control_passes = {(r["task_id"], r["task_checksum"])
+                      for r in controls if r["status"] == "control-pass"}
+    if any((r["task_id"], r["task_checksum"]) not in control_passes for r in scored):
+        raise ValueError("scored model trial lacks an oracle-positive verifier control")
+    checksums = defaultdict(set)
+    for row in scored:
+        checksums[row["task_id"]].add(row["task_checksum"])
+    if any(len(values) != 1 for values in checksums.values()):
+        raise ValueError("task version changed within cohort")
     by_lane = {}
     for lane in ("baseline", "mithril"):
         subset = [r for r in scored if r["lane"] == lane]
         successes = sum(r["reward"] == 1.0 for r in subset)
+        grouped = defaultdict(list)
+        for row in subset:
+            grouped[row["task_id"]].append(row)
+        task_rates = [sum(r["reward"] == 1.0 for r in group) / len(group)
+                      for group in grouped.values()]
         by_lane[lane] = {
-            "tasks": len({r["task_id"] for r in subset}),
+            "tasks": len(grouped),
             "trials": len(subset), "successes": successes,
-            "pass_at_1": successes / len(subset) if subset else None,
+            "pass_at_1": statistics.mean(task_rates) if task_rates else None,
+            "three_scored_repeats_per_task": bool(grouped) and all(len(group) == 3 for group in grouped.values()),
             "task_clustered_95pct_interval": clustered_interval(scored, lane),
             "mean_agent_wall_seconds": statistics.mean(r["agent_wall_seconds"] for r in subset) if subset else None,
             "mean_total_tokens": statistics.mean(r["input_tokens"] + r["output_tokens"] for r in subset) if subset else None,

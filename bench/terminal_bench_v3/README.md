@@ -31,6 +31,9 @@ reward file alone can be a false score.
 `summarize.py JOBS_DIR > rows.json` exports public-safe per-trial rows.
 `analyze.py rows.json` then reports scored coverage, oracle controls, success
 rates, and task-clustered intervals when at least five distinct tasks exist.
+It refuses a model row without an oracle-positive control for the same task
+checksum or a cohort that mixes task revisions. Pass@1 averages per-task
+repeat success rates; the report flags tasks without three scored repeats.
 The resource index remains null until ten matched successful repeats span at
 least five tasks. This floor only prevents a tiny sample from displaying an
 index; it is not a claim that ten repeats establish statistical significance.
