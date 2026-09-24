@@ -24,6 +24,9 @@ diagnose the model or loop. Sources:
 AA-Briefcase v1.1 has 91 private scored tasks. Its public Lite scenarios are
 useful for separate artifact checks but cannot recreate the leaderboard score
 or ranking: <https://artificialanalysis.ai/evaluations/aa-briefcase>.
+The earlier public Lite W1-T1 attempt had one run per lane; both PDFs failed
+the visual render-integrity gate and the remaining rubric was not scored.
+Its token figures are therefore not a qualified efficiency comparison.
 
 ## Primary measures and admission gates
 
@@ -65,6 +68,13 @@ still a custom Hermes adapter, so its score must not be called an AA score.
    Terminal-Bench's low Luna success rate makes equal-success pairs too sparse
    for a useful cost/speed index at small sample sizes. Do not combine its
    results with AA-Briefcase-Lite rubric outcomes.
+
+For the public AA-Briefcase-Lite track, predeclare the available scenario IDs,
+run each lane repeatedly with the same artifact workspace and shell/web tools,
+and apply every public rubric check including rendered-page integrity. Record
+judge version and raw rubric dimensions separately from artifact validity.
+The prior W1-T1 receipt is a development example, not an official
+AA-Briefcase v1.1 score. Private v1.1 tasks cannot be inferred from Lite.
 
 Qualification remains open until the predeclared cohort, valid verifier
 controls, and repeated outcomes exist. No speed, intelligence, or cost
