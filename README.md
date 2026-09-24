@@ -28,3 +28,7 @@ To add a cohort, retain its predeclared plan, all run receipts, full report,
 runner revision, Hermes version, and Mithril revision. Do not publish indices
 for pairs without exact expected-result parity. The denominator and eligible
 pair count accompany each aggregate.
+
+External task-family probes are kept separately from paired resource indices.
+They are not official benchmark scores and do not enter `results/index.edn`:
+see [the 2026-09-24 probe report](results/external-task-probes-2026-09-24.md).
