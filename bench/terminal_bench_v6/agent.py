@@ -236,6 +236,8 @@ class LoopAgent(BaseAgent):
                      +'\nLATEST DOMAIN EVIDENCE: '
                      +json.dumps((self.latest_state_receipt or {}).get('domain-entailed',{}),ensure_ascii=False)
                      +'\nUse only source vocabulary when adding RDF triples. Resolve one uncertain ontology relation or data-normalization hypothesis per experiment; test both standalone SPARQL queries on unified.ttl before finish.')
+            if getattr(self, 'jev_guidance', None):
+                prompt+='\nTYPED JEV PRIORITY (a hypothesis to test, not an accepted fact): '+self.jev_guidance
             if CRITICAL_REVIEW and self.critical_review_requested and not self.critical_review_done:
                 prompt+=('\nCRITICAL REVIEW REQUIRED: Challenge the solution as a skeptical reviewer. '
                          'Run a concrete verification command that checks generated triples use only source ontology/data terms, '
@@ -308,6 +310,8 @@ class LoopAgent(BaseAgent):
                 if self.lane=='mithril':
                     phase='hypothesize' if not self.history else ('reflect' if self.history[-1]['result']['exit_code']!=0 else 'experiment')
                     await self.encode_task_state(instruction,phase)
+                    if hasattr(self, 'before_query'):
+                        await self.before_query(instruction)
                 action=await self.query(instruction,enabled)
                 kind=action['action']; cmd=action['command']
                 if self.lane=='mithril' and kind=='inspect' and inspect_streak>=MAX_CONSECUTIVE_INSPECT:
@@ -360,14 +364,25 @@ class LoopAgent(BaseAgent):
             for p in sorted(self.usage_dir.glob('call-*.json')):
                 try: usage.append(json.loads(p.read_text()))
                 except Exception: pass
+            jev_usage_files=getattr(self,'jev_usage_files',[])
+            for p in jev_usage_files:
+                try: usage.append(json.loads(Path(p).read_text()))
+                except Exception: pass
             def sm(k): return sum((u.get(k) or u.get('usage',{}).get(k) or 0) for u in usage)
-            context.n_input_tokens=sm('total_tokens')-sm('output_tokens') or sm('input_tokens')
+            context.n_input_tokens=sum(((u.get('total_tokens') or u.get('usage',{}).get('total_tokens') or 0)
+                                        -(u.get('output_tokens') or u.get('usage',{}).get('output_tokens') or 0))
+                                       if (u.get('total_tokens') or u.get('usage',{}).get('total_tokens'))
+                                       else (u.get('input_tokens') or u.get('usage',{}).get('input_tokens') or 0)
+                                       for u in usage)
             context.n_output_tokens=sm('output_tokens')
             context.n_cache_tokens=sm('cache_read_tokens')+sm('cache_write_tokens')
             costs=[u.get('estimated_cost_usd',u.get('cost_usd')) for u in usage]
             context.cost_usd=sum(c for c in costs if isinstance(c,(int,float))) if any(isinstance(c,(int,float)) for c in costs) else None
             context.metadata={'lane':self.lane,'run_id':self.run_id,'repeat_id':REPEAT_ID,'step_count':len(self.history),'hermes_calls':len(self.calls),'usage_files':[x['usage_file'] for x in self.calls],'wall_agent_seconds':round(time.time()-started,3),'mithril_ontology_sha256':__import__('hashlib').sha256(ONTOLOGY.read_bytes()).hexdigest() if self.lane=='mithril' else None,'semantic_receipts':self.semantic_receipts}
             context.metadata.update({'task_state_receipts':len(self.task_state_receipts),
+                                     'jev_calls':len(jev_usage_files),
+                                     'jev_usage_files':[str(p) for p in jev_usage_files],
+                                     'jev_decisions':getattr(self,'jev_decisions',[]),
                                      'domain_ontology_digest':(self.domain_receipt or {}).get('ontology-digest'),
                                      'domain_source_class_count':(self.domain_receipt or {}).get('source-class-count'),
                                      'prefill_wall_seconds':round(getattr(self,'prefill_wall_seconds',0),3),
