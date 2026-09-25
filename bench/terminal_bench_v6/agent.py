@@ -51,6 +51,7 @@ class LoopAgent(BaseAgent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.calls=[]
+        self.failed_usage_files=[]
         self.history=[]
         self.semantic_receipts=0
         self.task_state_receipts=[]
@@ -68,6 +69,34 @@ class LoopAgent(BaseAgent):
         self.state.parent.mkdir(parents=True, exist_ok=True)
         self.usage_dir=RUN_ROOT / 'usage' / self.run_id
         self.usage_dir.mkdir(parents=True, exist_ok=True)
+
+    async def hermes_call(self, prompt, usage, kind):
+        """Retry a failed provider turn without rerunning a terminal action."""
+        model=os.environ.get('BENCH_MODEL','openai/gpt-6-luna')
+        failures=[]
+        for attempt in range(3):
+            attempt_usage=usage if attempt==0 else usage.with_name(f'{usage.stem}-retry-{attempt}{usage.suffix}')
+            p=await asyncio.create_subprocess_exec(HERMES,'--provider','openrouter','--model',model,
+                 '--reasoning','medium','--ignore-user-config','--ignore-rules','--toolsets','todo',
+                 '--usage-file',str(attempt_usage),'-z',prompt,
+                 stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+            out,err=await p.communicate()
+            if p.returncode==0:
+                self.calls.append({'usage_file':str(attempt_usage),'exit_code':0,'kind':kind})
+                return out.decode(errors='replace')
+            receipt={}
+            if attempt_usage.exists():
+                try: receipt=json.loads(attempt_usage.read_text())
+                except (ValueError,OSError): pass
+                self.failed_usage_files.append(str(attempt_usage))
+            detail=(err.decode(errors='replace')[-800:] or out.decode(errors='replace')[-800:]).strip()
+            failures.append({'exit':p.returncode,'partial':receipt.get('partial'),
+                             'api_calls':receipt.get('api_calls'),'detail':detail})
+            # The terminal has not been touched; only a partial provider turn is retryable.
+            if not receipt.get('partial') or attempt==2:
+                break
+            await asyncio.sleep(2 * (attempt+1))
+        raise RuntimeError(f'Hermes {kind} failed after {len(failures)} attempt(s): {json.dumps(failures)}')
 
     async def shell(self, environment, command):
         try:
@@ -145,12 +174,7 @@ class LoopAgent(BaseAgent):
             prompt += '\nPRECOMPILED MITH KNOWLEDGE (hypotheses, verify against source):\n' + self.knowledge_guidance
         usage=self.usage_dir/'call-000.json'
         started=time.monotonic()
-        p=await asyncio.create_subprocess_exec(HERMES,'--provider','openrouter','--model','openai/gpt-6-luna',
-             '--reasoning','medium','--ignore-user-config','--ignore-rules','--toolsets','todo',
-             '--usage-file',str(usage),'-z',prompt,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
-        out,err=await p.communicate()
-        if p.returncode: raise RuntimeError('Prefill model failed: '+err.decode()[-1000:])
-        raw=out.decode(errors='replace')
+        raw=await self.hermes_call(prompt,usage,'prefill')
         decoder=json.JSONDecoder(); candidates=[]
         for i,ch in enumerate(raw):
             if ch=='{':
@@ -168,7 +192,6 @@ class LoopAgent(BaseAgent):
                    'focus_properties':[v for v in strings('focus_properties',12) if v in known_properties]}
         if not self.plan['goals'] or not self.plan['focus_classes']:
             raise RuntimeError('Prefill lacked source-grounded goals or focus classes')
-        self.calls.append({'usage_file':str(usage),'exit_code':p.returncode,'kind':'prefill'})
         self.prompt_chars.append(len(prompt))
         (self.state.with_suffix('.plan.json')).write_text(json.dumps(self.plan,ensure_ascii=False))
         self.prefill_wall_seconds=time.monotonic()-started
@@ -249,11 +272,7 @@ class LoopAgent(BaseAgent):
                          'Return action="verify"; revise the files if it fails. Do not finish in this turn.')
         self.prompt_chars.append(len(prompt))
         usage=self.usage_dir/f'call-{n:03}.json'
-        p=await asyncio.create_subprocess_exec(HERMES,'--provider','openrouter','--model','openai/gpt-6-luna','--reasoning','medium','--ignore-user-config','--ignore-rules','--toolsets','todo','--usage-file',str(usage),'-z',prompt,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
-        out,err=await p.communicate()
-        if p.returncode: raise RuntimeError(f'Hermes exit {p.returncode}: {err.decode()[-1000:]}')
-        raw=out.decode(errors='replace').strip()
-        self.calls.append({'usage_file':str(usage),'exit_code':p.returncode})
+        raw=(await self.hermes_call(prompt,usage,'action')).strip()
         decoder=json.JSONDecoder(); action=None
         for i,ch in enumerate(raw):
             if ch!='{': continue
@@ -268,14 +287,7 @@ class LoopAgent(BaseAgent):
                            +raw[-12000:])
             repair_usage=self.usage_dir/f'call-{n:03}-repair.json'
             self.prompt_chars.append(len(repair_prompt))
-            repair=await asyncio.create_subprocess_exec(HERMES,'--provider','openrouter','--model','openai/gpt-6-luna',
-                  '--reasoning','medium','--ignore-user-config','--ignore-rules','--toolsets','todo',
-                  '--usage-file',str(repair_usage),'-z',repair_prompt,
-                  stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
-            repaired_out,repaired_err=await repair.communicate()
-            if repair.returncode: raise RuntimeError('JSON repair model failed: '+repaired_err.decode()[-1000:])
-            self.calls.append({'usage_file':str(repair_usage),'exit_code':repair.returncode,'kind':'json-repair'})
-            repaired_raw=repaired_out.decode(errors='replace')
+            repaired_raw=await self.hermes_call(repair_prompt,repair_usage,'json-repair')
             for i,ch in enumerate(repaired_raw):
                 if ch!='{': continue
                 try:
@@ -384,6 +396,7 @@ class LoopAgent(BaseAgent):
             context.cost_usd=sum(c for c in costs if isinstance(c,(int,float))) if any(isinstance(c,(int,float)) for c in costs) else None
             context.metadata={'lane':self.lane,'run_id':self.run_id,'repeat_id':REPEAT_ID,'step_count':len(self.history),'hermes_calls':len(self.calls),'usage_files':[x['usage_file'] for x in self.calls],'wall_agent_seconds':round(time.time()-started,3),'mithril_ontology_sha256':__import__('hashlib').sha256(ONTOLOGY.read_bytes()).hexdigest() if self.lane=='mithril' else None,'semantic_receipts':self.semantic_receipts}
             context.metadata.update({'task_state_receipts':len(self.task_state_receipts),
+                                     'failed_usage_files':self.failed_usage_files,
                                      'jev_calls':len(jev_usage_files),
                                      'jev_usage_files':[str(p) for p in jev_usage_files],
                                      'jev_decisions':getattr(self,'jev_decisions',[]),
