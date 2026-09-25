@@ -6,7 +6,7 @@ the frozen source it reproduces (checked by tests/test_equivalence.py).
 they stay out of the runner until their prerequisites are measured.
 """
 
-from .components import AutoAcceptance, DifferentialJudge, GraphToolkit, InvariantCheck, KnowledgePack, SchemaCard, JevPriority, JEV_NEUTRAL_INSTRUCTION, KnowledgeRetrieval
+from .components import AutoAcceptance, DifferentialJudge, GraphToolkit, InvariantCheck, KnowledgePack, RequirementGate, SchemaCard, JevPriority, JEV_NEUTRAL_INSTRUCTION, KnowledgeRetrieval
 from .loop import HarnessLoop
 
 
@@ -115,6 +115,12 @@ class DomainV3Lane(KnowledgePack, ReactLane):
     def name(): return 'react-domain-knowledge-v3-gpt6-luna-loop'
 
 
+class RequirementGateLane(RequirementGate, ReactLane):
+    lane_id = 'reqgate'
+    @staticmethod
+    def name(): return 'react-requirements-gate-gpt6-luna-loop'
+
+
 LANES = {
     'react':          {'import': 'mithril_harness.lanes:ReactLane', 'adds': [],
                        'reproduces': 'bench/terminal_bench_v6/agent.py:HermesBaselineAgent'},
@@ -142,6 +148,7 @@ LANES = {
     'invariants': {'import': 'mithril_harness.lanes:InvariantLane', 'adds': ['invariant-check:FC-03'], 'reproduces': None},
     'grounded': {'import': 'mithril_harness.lanes:GroundedLane', 'adds': ['schema-card', 'invariant-check:FC-03'], 'reproduces': None},
     'domain-v3': {'import': 'mithril_harness.lanes:DomainV3Lane', 'adds': ['knowledge:reach-domain-v3'], 'reproduces': None},
+    'reqgate': {'import': 'mithril_harness.lanes:RequirementGateLane', 'adds': ['requirements-gate'], 'reproduces': None},
     'auto-acceptance': {'import': 'mithril_harness.lanes:AutoAcceptanceLane',
                         'adds': ['semantic-layer', 'typed-acceptance-prefill', 'acceptance-after-modify'],
                         'reproduces': None},
