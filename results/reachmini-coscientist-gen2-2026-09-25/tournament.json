@@ -1,0 +1,136 @@
+{
+  "matches": 120,
+  "ranking": [
+    [
+      "schema",
+      1553.1
+    ],
+    [
+      "grounded",
+      1544.4
+    ],
+    [
+      "invariants",
+      1518.4
+    ],
+    [
+      "react",
+      1491.4
+    ],
+    [
+      "domain-v3",
+      1392.6
+    ]
+  ],
+  "wins": {
+    "domain-v3": {
+      "grounded": 3.0,
+      "invariants": 4.0,
+      "react": 2.0,
+      "schema": 3.0
+    },
+    "grounded": {
+      "domain-v3": 9.0,
+      "invariants": 6.0,
+      "react": 9.0,
+      "schema": 5.0
+    },
+    "invariants": {
+      "domain-v3": 8.0,
+      "grounded": 6.0,
+      "react": 7.0,
+      "schema": 5.0
+    },
+    "react": {
+      "domain-v3": 10.0,
+      "grounded": 3.0,
+      "invariants": 5.0,
+      "schema": 5.0
+    },
+    "schema": {
+      "domain-v3": 9.0,
+      "grounded": 7.0,
+      "invariants": 7.0,
+      "react": 7.0
+    }
+  },
+  "lanes": {
+    "domain-v3": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 11,
+      "mean_score": 0.9524,
+      "cost_usd": 0.105413
+    },
+    "grounded": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 11,
+      "mean_score": 0.9643,
+      "cost_usd": 0.068428
+    },
+    "invariants": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 12,
+      "mean_score": 1.0,
+      "cost_usd": 0.078359
+    },
+    "react": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 11,
+      "mean_score": 0.9643,
+      "cost_usd": 0.079688
+    },
+    "schema": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 11,
+      "mean_score": 0.9762,
+      "cost_usd": 0.072975
+    }
+  },
+  "meta_review_candidates": [
+    {
+      "failed_check": "blast_radius.tsv",
+      "lanes": {
+        "schema": 1,
+        "domain-v3": 2,
+        "grounded": 1,
+        "react": 2
+      },
+      "seeds": [
+        531,
+        540,
+        542
+      ],
+      "status": "candidate (not admitted; needs held-out evidence)"
+    },
+    {
+      "failed_check": "exposure_paths.tsv",
+      "lanes": {
+        "schema": 1,
+        "domain-v3": 2,
+        "grounded": 1,
+        "react": 1
+      },
+      "seeds": [
+        531,
+        540,
+        542
+      ],
+      "status": "candidate (not admitted; needs held-out evidence)"
+    },
+    {
+      "failed_check": "runs",
+      "lanes": {
+        "grounded": 1
+      },
+      "seeds": [
+        542
+      ],
+      "status": "candidate (not admitted; needs held-out evidence)"
+    }
+  ]
+}

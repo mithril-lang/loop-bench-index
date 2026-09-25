@@ -7,6 +7,8 @@ named by the role it plays in the derived model (see harness/README.md):
 - AutoAcceptance      typed acceptance check run by the harness after every modify
 - KnowledgePack       compiled .mith knowledge packs (domain rules, failure cases) in the static task text
 - GraphToolkit        a task-agnostic graph helper placed in the container
+- SchemaCard          a deterministic profile of the target environment's own ontology and data
+- InvariantCheck      after each modify, necessary conditions derived from the data (failure case FC-03)
 """
 
 import asyncio
@@ -418,3 +420,93 @@ class GraphToolkit:
 
     def task_text(self, instruction):
         return super().task_text(instruction) + GRAPHKIT_TEXT
+
+
+SCHEMA_PROBE = Path(__file__).resolve().parents[1] / 'attack' / 'container' / 'schema_probe.py'
+TARGET_DIR = re.compile(r"`(/app/[\w.-]+)/`")
+
+
+class SchemaCard:
+    """Profiles the target environment inside the container before the first
+    model call and puts the card in the static task text. It describes the
+    data (sources, classes, rule comments, where names resolve, parameters)
+    and computes no answer."""
+    container_files = {'/opt/harness/schema_probe.py': SCHEMA_PROBE}
+
+    async def run(self, instruction, environment, context):
+        match = TARGET_DIR.search(instruction)
+        if not match:
+            raise RuntimeError('REFUSE: no target directory in the instruction for the schema card')
+        result = await environment.exec(command=f'python3 /opt/harness/schema_probe.py card {shlex.quote(match.group(1))}',
+                                        timeout_sec=120)
+        if result.return_code != 0:
+            raise RuntimeError('REFUSE: schema card failed: ' + (result.stderr or '')[-600:])
+        card = json.loads(result.stdout)
+        self.schema_card_text = json.dumps(card, sort_keys=True)
+        self.schema_card_receipt = {'target': match.group(1), 'chars': len(self.schema_card_text),
+                                    'identity_classes': sorted(card.get('identity', {})),
+                                    'comments': len(card.get('comments', {})), 'parameters': len(card.get('parameters', []))}
+        return await super().run(instruction, environment, context)
+
+    def task_text(self, instruction):
+        text = super().task_text(instruction)
+        if getattr(self, 'schema_card_text', None):
+            text += ('\n\nSCHEMA CARD (computed by the harness from the target environment; describes the data, '
+                     'not the answer):\n' + self.schema_card_text)
+        return text
+
+    def extra_metadata(self):
+        data = dict(super().extra_metadata())
+        data['schema_card'] = getattr(self, 'schema_card_receipt', None)
+        return data
+
+
+INVARIANT_TEXT = ('\n\nHARNESS INVARIANT CHECK (applies to this run): after every modify action the harness runs '
+                  '/app/solve.py on the target environment and checks necessary conditions derived from the data: '
+                  'output host names are names from the authoritative host source, every entry host is listed, and '
+                  'an entry host that runs as a role reaches at least one role. Passing does not mean the answer is right.')
+
+
+class InvariantCheck:
+    """reachmini-specific: after each modify, run the solver and schema_probe
+    check-reach, and append the report to the observation."""
+    container_files = {'/opt/harness/schema_probe.py': SCHEMA_PROBE}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.invariant_runs = []
+
+    def task_text(self, instruction):
+        return super().task_text(instruction) + INVARIANT_TEXT
+
+    async def run(self, instruction, environment, context):
+        match = TARGET_DIR.search(instruction)
+        self.invariant_target = match.group(1) if match else None
+        return await super().run(instruction, environment, context)
+
+    async def execute_action(self, environment, action):
+        result = await super().execute_action(environment, action)
+        if action['action'] != 'modify' or not self.invariant_target:
+            return result
+        target = shlex.quote(self.invariant_target)
+        command = (f'rm -rf /tmp/invariant-out && timeout 120 python3 /app/solve.py {target} /tmp/invariant-out '
+                   f'&& python3 /opt/harness/schema_probe.py check-reach {target} /tmp/invariant-out')
+        started = time.monotonic()
+        try:
+            check = await environment.exec(command=command, timeout_sec=200)
+            code, out = check.return_code, (check.stdout or '') + (check.stderr or '')[-800:]
+        except RuntimeError as exc:
+            if 'timed out' not in str(exc).lower():
+                raise
+            code, out = 124, 'invariant check timed out'
+        self.acceptance_wall_seconds = getattr(self, 'acceptance_wall_seconds', 0.0) + time.monotonic() - started
+        self.invariant_runs.append({'step': len(self.history), 'exit': code})
+        result = dict(result)
+        result['stdout'] = (result.get('stdout') or '') + f'\n[HARNESS INVARIANT CHECK after modify: exit {code}]\n' + out[-3000:]
+        return result
+
+    def extra_metadata(self):
+        data = dict(super().extra_metadata())
+        exits = [r['exit'] for r in self.invariant_runs]
+        data.update({'invariant_runs': len(exits), 'invariant_pass': exits.count(0)})
+        return data
