@@ -243,6 +243,10 @@ class HarnessLoop(BaseAgent):
             self.exec_wall_seconds += time.monotonic() - started
 
     async def _shell(self, environment, command):
+        if self.transport == 'chat' and os.environ.get('BENCH_WRAP_TIMEOUT', '1') == '1':
+            # Enforce the limit inside the container: through Harbor's Podman shim the
+            # outer exec timeout left a looping command running for 2 h 26 min.
+            command = f'timeout -k 5 110 bash -c {shlex.quote(command)}'
         try:
             res = await environment.exec(command=command, timeout_sec=120)
             return {'exit_code': res.return_code, 'stdout': (res.stdout or '')[-12000:], 'stderr': (res.stderr or '')[-4000:]}
