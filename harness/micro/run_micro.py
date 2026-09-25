@@ -225,7 +225,7 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--max-steps', type=int, default=10)
     parser.add_argument('--trial-timeout', type=int, default=420)
-    parser.add_argument('--deadline', type=int, default=600)
+    parser.add_argument('--deadline', type=int, default=570)  # leaves room for cancellation and cleanup under 600 s
     parser.add_argument('--transport', default='chat', choices=('chat', 'hermes'))
     parser.add_argument('--difficulty', type=int, default=3, choices=(1, 2, 3))
     parser.add_argument('--mithril-cli', action='store_true', help='spawn kbb per Mithril call instead of the resident server')
