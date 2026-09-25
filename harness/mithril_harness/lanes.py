@@ -6,7 +6,7 @@ the frozen source it reproduces (checked by tests/test_equivalence.py).
 they stay out of the runner until their prerequisites are measured.
 """
 
-from .components import AutoAcceptance, DifferentialJudge, GraphToolkit, KnowledgePack, JevPriority, JEV_NEUTRAL_INSTRUCTION, KnowledgeRetrieval
+from .components import AutoAcceptance, DifferentialJudge, GraphToolkit, InvariantCheck, KnowledgePack, SchemaCard, JevPriority, JEV_NEUTRAL_INSTRUCTION, KnowledgeRetrieval
 from .loop import HarnessLoop
 
 
@@ -90,6 +90,31 @@ class CombinedLane(KnowledgePack, GraphToolkit, ReactLane):
     def name(): return 'react-knowledge-graph-gpt6-luna-loop'
 
 
+class SchemaLane(SchemaCard, ReactLane):
+    lane_id = 'schema'
+    @staticmethod
+    def name(): return 'react-schema-card-gpt6-luna-loop'
+
+
+class InvariantLane(InvariantCheck, ReactLane):
+    lane_id = 'invariants'
+    @staticmethod
+    def name(): return 'react-invariant-check-gpt6-luna-loop'
+
+
+class GroundedLane(SchemaCard, InvariantCheck, ReactLane):
+    lane_id = 'grounded'
+    @staticmethod
+    def name(): return 'react-schema-card-invariants-gpt6-luna-loop'
+
+
+class DomainV3Lane(KnowledgePack, ReactLane):
+    lane_id = 'domain-v3'
+    knowledge_packs = ('reach-domain-v3.mith',)
+    @staticmethod
+    def name(): return 'react-domain-knowledge-v3-gpt6-luna-loop'
+
+
 LANES = {
     'react':          {'import': 'mithril_harness.lanes:ReactLane', 'adds': [],
                        'reproduces': 'bench/terminal_bench_v6/agent.py:HermesBaselineAgent'},
@@ -113,6 +138,10 @@ LANES = {
     'failures': {'import': 'mithril_harness.lanes:FailureKnowledgeLane', 'adds': ['knowledge:failure-cases'], 'reproduces': None},
     'combined': {'import': 'mithril_harness.lanes:CombinedLane',
                  'adds': ['knowledge:reach-domain', 'knowledge:failure-cases', 'graph-toolkit'], 'reproduces': None},
+    'schema': {'import': 'mithril_harness.lanes:SchemaLane', 'adds': ['schema-card'], 'reproduces': None},
+    'invariants': {'import': 'mithril_harness.lanes:InvariantLane', 'adds': ['invariant-check:FC-03'], 'reproduces': None},
+    'grounded': {'import': 'mithril_harness.lanes:GroundedLane', 'adds': ['schema-card', 'invariant-check:FC-03'], 'reproduces': None},
+    'domain-v3': {'import': 'mithril_harness.lanes:DomainV3Lane', 'adds': ['knowledge:reach-domain-v3'], 'reproduces': None},
     'auto-acceptance': {'import': 'mithril_harness.lanes:AutoAcceptanceLane',
                         'adds': ['semantic-layer', 'typed-acceptance-prefill', 'acceptance-after-modify'],
                         'reproduces': None},
