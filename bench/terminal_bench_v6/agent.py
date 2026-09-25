@@ -141,6 +141,8 @@ class LoopAgent(BaseAgent):
                 'focus_properties (property names copied exactly from the inventory). '
                 'Use only task instruction and source inventory; do not invent a solution or rely on verifier fixtures.\n'
                 f'TASK:\n{instruction}\nSOURCE INVENTORY:\n{json.dumps(probe,ensure_ascii=False)}')
+        if getattr(self, 'knowledge_guidance', None):
+            prompt += '\nPRECOMPILED MITH KNOWLEDGE (hypotheses, verify against source):\n' + self.knowledge_guidance
         usage=self.usage_dir/'call-000.json'
         started=time.monotonic()
         p=await asyncio.create_subprocess_exec(HERMES,'--provider','openrouter','--model','openai/gpt-6-luna',
@@ -238,6 +240,8 @@ class LoopAgent(BaseAgent):
                      +'\nUse only source vocabulary when adding RDF triples. Resolve one uncertain ontology relation or data-normalization hypothesis per experiment; test both standalone SPARQL queries on unified.ttl before finish.')
             if getattr(self, 'jev_guidance', None):
                 prompt+='\nTYPED JEV PRIORITY (a hypothesis to test, not an accepted fact): '+self.jev_guidance
+            if getattr(self, 'knowledge_guidance', None):
+                prompt+='\nPRECOMPILED MITH KNOWLEDGE (source verification required): '+self.knowledge_guidance
             if CRITICAL_REVIEW and self.critical_review_requested and not self.critical_review_done:
                 prompt+=('\nCRITICAL REVIEW REQUIRED: Challenge the solution as a skeptical reviewer. '
                          'Run a concrete verification command that checks generated triples use only source ontology/data terms, '
@@ -385,6 +389,10 @@ class LoopAgent(BaseAgent):
                                      'jev_decisions':getattr(self,'jev_decisions',[]),
                                      'domain_ontology_digest':(self.domain_receipt or {}).get('ontology-digest'),
                                      'domain_source_class_count':(self.domain_receipt or {}).get('source-class-count'),
+                                     'knowledge_general_digest':(getattr(self,'knowledge_receipt',None) or {}).get('general-digest'),
+                                     'knowledge_task_digest':(getattr(self,'knowledge_receipt',None) or {}).get('task-digest'),
+                                     'knowledge_general_rules':(getattr(self,'knowledge_receipt',None) or {}).get('general-rule-count'),
+                                     'knowledge_task_rules':(getattr(self,'knowledge_receipt',None) or {}).get('task-rule-count'),
                                      'prefill_wall_seconds':round(getattr(self,'prefill_wall_seconds',0),3),
                                      'critical_review_enabled':CRITICAL_REVIEW if self.lane=='mithril' else False,
                                      'mithril_wall_seconds':round(self.mith_wall_seconds,3),
