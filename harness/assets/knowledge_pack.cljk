@@ -1,0 +1,44 @@
+(ns terminal-bench.knowledge-pack
+  "Compile any number of .mith knowledge packs and return every text entry with
+  its class, plus an OWL 2 RL closure count over the packs' class and property
+  axioms. Refuses (exit 2) when a pack compiles to no entries."
+  (:require [clojure.string :as str]
+            [mithril.compiler :as compiler]
+            [oak.semantic :as oak]))
+
+(def fs (js/require "node:fs"))
+(defn emit! [value] (println (.stringify js/JSON (clj->js value))))
+(defn field [node key] (or (get node key) (get node (keyword key))))
+(defn text-value [v]
+  (cond (string? v) v
+        (map? v) (or (field v "@value") (field v "value") (str v))
+        (sequential? v) (str/join " " (map text-value v))
+        :else (str v)))
+
+(let [paths *command-line-args*]
+  (try
+    (when (empty? paths) (throw (js/Error. "usage: knowledge_pack.cljk PACK.mith ...")))
+    (let [packs (for [p paths]
+                  (let [artifact (compiler/compile-ontology-text p (.readFileSync fs p "utf8"))
+                        nodes (or (get-in artifact [:rdf-dataset "@graph"]) [])
+                        entries (vec (keep (fn [n] (when-let [t (field n "text")]
+                                                     {:id (field n "@id") :kind (text-value (field n "@type"))
+                                                      :text (text-value t)}))
+                                           nodes))]
+                    {:path p :digest (:graph-digest artifact) :nodes nodes :entries entries}))
+          empty-pack (first (filter #(empty? (:entries %)) packs))
+          _ (when empty-pack (throw (js/Error. (str "pack has no entries: " (:path empty-pack)))))
+          axioms (set (concat
+                       (for [pack packs n (:nodes pack) :let [p (field n "subClassOf")] :when p]
+                         (oak/triple (field n "@id") :rdfs/subClassOf p))
+                       (for [pack packs n (:nodes pack) :let [p (field n "subPropertyOf")] :when p]
+                         (oak/triple (field n "@id") :rdfs/subPropertyOf p))
+                       (for [pack packs e (:entries pack)]
+                         (oak/triple (:id e) :rdf/type (:kind e)))))
+          closure (oak/materialize :owl2-rl axioms)]
+      (emit! {:packs (vec (for [p packs] {:path (:path p) :digest (:digest p) :entries (count (:entries p))}))
+              :axioms (count axioms) :closure (count closure)
+              :entries (vec (mapcat :entries packs))}))
+    (catch :default e
+      (emit! {:error (or (.-message e) (str e))})
+      (set! (.-exitCode js/process) 2))))

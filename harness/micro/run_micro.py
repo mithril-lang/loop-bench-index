@@ -34,6 +34,17 @@ HERE = Path(__file__).resolve().parent
 HARNESS = HERE.parent
 IMAGE = 'localhost/harness-micro:rdflib-7.1.4'
 PREFIX = 'harness-micro-'
+FAMILIES = {
+    # visible: copied to /app before the agent starts; hidden: pristine copies the verifier uses
+    'railmini': {'module': HERE / 'railmini.py', 'visible': ['app/2031-q2', 'app/2031-q1'],
+                 'hidden': ['app/2031-q2', 'hidden/2031-q3'], 'verify': HERE / 'verify.py',
+                 'generate': lambda mod, seed, out, a: mod.generate(seed, out, a.difficulty),
+                 'knobs': lambda a: {'difficulty': a.difficulty}},
+    'reachmini': {'module': HARNESS / 'attack' / 'reachmini.py', 'visible': ['app/env-t', 'app/env-e'],
+                  'hidden': ['app/env-t', 'hidden/env-h'], 'verify': HARNESS / 'attack' / 'verify.py',
+                  'generate': lambda mod, seed, out, a: mod.generate(seed, out, a.depth, a.size, a.noise),
+                  'knobs': lambda a: {'depth': a.depth, 'size': a.size, 'noise': a.noise}},
+}
 
 
 def podman(*args, check=True, timeout=120):
@@ -98,12 +109,12 @@ def usage_totals(usage_dir):
     return totals
 
 
-async def verify(name, task_dir):
+async def verify(name, task_dir, family):
     await apodman('exec', name, 'mkdir', '-p', '/verify/bundles')
-    for bundle in (task_dir / 'app' / '2031-q2', task_dir / 'hidden' / '2031-q3'):
-        await apodman('cp', str(bundle), f'{name}:/verify/bundles/')  # pristine copies, never the agent's
+    for rel in family['hidden']:
+        await apodman('cp', str(task_dir / rel), f'{name}:/verify/bundles/')  # pristine copies, never the agent's
     await apodman('cp', str(task_dir / 'expected.json'), f'{name}:/verify/expected.json')
-    await apodman('cp', str(HERE / 'verify.py'), f'{name}:/verify/verify.py')
+    await apodman('cp', str(family['verify']), f'{name}:/verify/verify.py')
     proc = await asyncio.create_subprocess_exec(
         'podman', 'exec', name, 'python3', '/verify/verify.py', '/verify/expected.json', '/verify/bundles',
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -113,14 +124,17 @@ async def verify(name, task_dir):
     return json.loads(out.decode().strip().splitlines()[-1]), None
 
 
-async def trial(lane_id, lane_cls, seed, task_dir, args, run_root):
+async def trial(lane_id, lane_cls, seed, task_dir, args, run_root, family):
     name = f'{PREFIX}{lane_id}-{seed}-{uuid.uuid4().hex[:6]}'
     row = {'lane': lane_id, 'seed': seed, 'container': name}
     started = time.monotonic()
     await apodman('run', '-d', '--name', name, '--memory', '384m', IMAGE, 'sleep', 'infinity')
     try:
-        for bundle in ('2031-q2', '2031-q1'):
-            await apodman('cp', str(task_dir / 'app' / bundle), f'{name}:/app/')
+        for rel in family['visible']:
+            await apodman('cp', str(task_dir / rel), f'{name}:/app/')
+        for target, source in getattr(lane_cls, 'container_files', {}).items():
+            await apodman('exec', name, 'mkdir', '-p', str(Path(target).parent))
+            await apodman('cp', str(source), f'{name}:{target}')
         instruction = (task_dir / 'instruction.md').read_text()
         agent = lane_cls(logs_dir=Path(run_root) / 'logs' / name)
         context = types.SimpleNamespace(metadata=None)
@@ -145,7 +159,7 @@ async def trial(lane_id, lane_cls, seed, task_dir, args, run_root):
         for key in ('acceptance_runs', 'acceptance_pass', 'differential_submissions'):
             if key in meta:
                 row[key] = meta[key]
-        result, verify_error = await verify(name, task_dir)
+        result, verify_error = await verify(name, task_dir, family)
         if result is None:
             row.update({'status': 'unmeasured', 'verify_error': verify_error})
         else:
@@ -184,12 +198,15 @@ def summarize(rows, lanes):
 async def main_async(args, lanes_map, lanes):
     run_root = Path(os.environ['BENCH_RUN_ROOT'])
     tasks_root = Path(args.output) / 'tasks'
-    sys.path.insert(0, str(HERE))
-    import railmini
+    import importlib.util
+    family = FAMILIES[args.family]
+    spec = importlib.util.spec_from_file_location(args.family, family['module'])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
     for seed in args.seeds:
-        railmini.generate(seed, tasks_root / f's{seed}', args.difficulty)
+        family['generate'](module, seed, tasks_root / f's{seed}', args)
     loop_started = time.monotonic()
-    jobs = {asyncio.ensure_future(trial(lane, lanes_map[lane], seed, tasks_root / f's{seed}', args, run_root)): (lane, seed)
+    jobs = {asyncio.ensure_future(trial(lane, lanes_map[lane], seed, tasks_root / f's{seed}', args, run_root, family)): (lane, seed)
             for lane in lanes for seed in args.seeds}
     done, pending = await asyncio.wait(jobs, timeout=args.deadline)
     rows = []
@@ -212,6 +229,7 @@ async def main_async(args, lanes_map, lanes):
     rows.sort(key=lambda r: (r['lane'], r['seed']))
     report = {'loop_wall_seconds': loop_wall, 'deadline_seconds': args.deadline, 'transport': os.environ['BENCH_TRANSPORT'],
               'model': os.environ.get('BENCH_MODEL', 'openai/gpt-6-luna'), 'reasoning': os.environ.get('BENCH_REASONING', 'medium'),
+              'family': args.family, 'knobs': FAMILIES[args.family]['knobs'](args),
               'max_steps': args.max_steps, 'difficulty': args.difficulty, 'mithril_resident': not args.mithril_cli, 'trial_timeout_seconds': args.trial_timeout, 'seeds': args.seeds,
               'summary': summarize(rows, lanes), 'rows': rows}
     Path(args.output, 'report.json').write_text(json.dumps(report, indent=2))
@@ -227,7 +245,11 @@ def main():
     parser.add_argument('--trial-timeout', type=int, default=420)
     parser.add_argument('--deadline', type=int, default=570)  # leaves room for cancellation and cleanup under 600 s
     parser.add_argument('--transport', default='chat', choices=('chat', 'hermes'))
+    parser.add_argument('--family', default='railmini', choices=sorted(FAMILIES))
     parser.add_argument('--difficulty', type=int, default=3, choices=(1, 2, 3))
+    parser.add_argument('--depth', type=int, default=6)
+    parser.add_argument('--size', type=int, default=30)
+    parser.add_argument('--noise', type=int, default=1, choices=(0, 1, 2))
     parser.add_argument('--mithril-cli', action='store_true', help='spawn kbb per Mithril call instead of the resident server')
     args = parser.parse_args()
     if Path(args.output).exists():

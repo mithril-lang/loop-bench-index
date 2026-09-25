@@ -6,7 +6,7 @@ the frozen source it reproduces (checked by tests/test_equivalence.py).
 they stay out of the runner until their prerequisites are measured.
 """
 
-from .components import AutoAcceptance, DifferentialJudge, JevPriority, JEV_NEUTRAL_INSTRUCTION, KnowledgeRetrieval
+from .components import AutoAcceptance, DifferentialJudge, GraphToolkit, KnowledgePack, JevPriority, JEV_NEUTRAL_INSTRUCTION, KnowledgeRetrieval
 from .loop import HarnessLoop
 
 
@@ -63,6 +63,33 @@ class AutoAcceptanceLane(AutoAcceptance, MithrilLane):
     def name(): return 'mithril-auto-acceptance-gpt6-luna-terminal-loop'
 
 
+class GraphLane(GraphToolkit, ReactLane):
+    lane_id = 'graph'
+    @staticmethod
+    def name(): return 'react-graph-toolkit-gpt6-luna-loop'
+
+
+class DomainKnowledgeLane(KnowledgePack, ReactLane):
+    lane_id = 'domain'
+    knowledge_packs = ('reach-domain-v1.mith',)
+    @staticmethod
+    def name(): return 'react-domain-knowledge-gpt6-luna-loop'
+
+
+class FailureKnowledgeLane(KnowledgePack, ReactLane):
+    lane_id = 'failures'
+    knowledge_packs = ('failure-cases-v1.mith',)
+    @staticmethod
+    def name(): return 'react-failure-knowledge-gpt6-luna-loop'
+
+
+class CombinedLane(KnowledgePack, GraphToolkit, ReactLane):
+    lane_id = 'combined'
+    knowledge_packs = ('reach-domain-v1.mith', 'failure-cases-v1.mith')
+    @staticmethod
+    def name(): return 'react-knowledge-graph-gpt6-luna-loop'
+
+
 LANES = {
     'react':          {'import': 'mithril_harness.lanes:ReactLane', 'adds': [],
                        'reproduces': 'bench/terminal_bench_v6/agent.py:HermesBaselineAgent'},
@@ -81,6 +108,11 @@ LANES = {
                        'task_assisted': True},
     'judge':          {'import': 'mithril_harness.lanes:JudgeLane', 'adds': ['semantic-layer', 'differential-judge'],
                        'reproduces': None},
+    'graph': {'import': 'mithril_harness.lanes:GraphLane', 'adds': ['graph-toolkit'], 'reproduces': None},
+    'domain': {'import': 'mithril_harness.lanes:DomainKnowledgeLane', 'adds': ['knowledge:reach-domain'], 'reproduces': None},
+    'failures': {'import': 'mithril_harness.lanes:FailureKnowledgeLane', 'adds': ['knowledge:failure-cases'], 'reproduces': None},
+    'combined': {'import': 'mithril_harness.lanes:CombinedLane',
+                 'adds': ['knowledge:reach-domain', 'knowledge:failure-cases', 'graph-toolkit'], 'reproduces': None},
     'auto-acceptance': {'import': 'mithril_harness.lanes:AutoAcceptanceLane',
                         'adds': ['semantic-layer', 'typed-acceptance-prefill', 'acceptance-after-modify'],
                         'reproduces': None},
