@@ -1,5 +1,8 @@
 # Sequential Terminal-Bench knowledge comparison
 
+The action-level investigation of the 17 versus 33 steps is in
+[step-growth-analysis.md](step-growth-analysis.md).
+
 Date: 2026-09-25. Task: `ontology-kg-querying`, checksum `36696def4524165e9caad8f162fb58f8a37f5769ca192139b724d2493648345d`. Both lanes used the same `MithrilDomainPrefillAgent` Luna/Mithril loop, `openai/gpt-6-luna` via Hermes/OpenRouter at medium reasoning, `BENCH_MAX_STEPS=48`, `BENCH_REPEAT_ID=knowledge-sequential-01`, and Harbor verifier. The treatment added `MithrilKnowledgeAgent`'s precompiled general and railway `.mith` retrieval before prefill and each action. The treatment and control were executed **sequentially** on one 2 GiB Podman VM; Harbor did not overlap their containers. This is a nonblind, task-specific development comparison, one trial per lane.
 
 | Measure | No static knowledge | Precompiled Mith knowledge |
