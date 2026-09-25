@@ -1,0 +1,75 @@
+(ns terminal-bench.knowledge-lookup
+  (:require [clojure.string :as str]
+            [mithril.compiler :as compiler]
+            [oak.semantic :as oak]))
+
+(def fs (js/require "node:fs"))
+(defn emit! [value] (println (.stringify js/JSON (clj->js value))))
+
+(defn compile-source [path]
+  (compiler/compile-ontology-text path (.readFileSync fs path "utf8")))
+
+(defn field [node key]
+  (or (get node key) (get node (keyword key))))
+
+(defn text-value [value]
+  (cond
+    (string? value) value
+    (map? value) (or (field value "@value") (field value "value") (str value))
+    (sequential? value) (str/join " " (map text-value value))
+    :else (str value)))
+
+(defn entries [artifact]
+  (let [nodes (or (get-in artifact [:rdf-dataset "@graph"])
+                  (get-in artifact [:rdf-dataset (keyword "@graph")]) [])]
+    (vec (keep (fn [node]
+                 (let [id (field node "@id")
+                       kind (field node "@type")
+                       explanation (field node "text")]
+                   (when explanation
+                     {:id id :kind kind :text (text-value explanation)})))
+               nodes))))
+
+(let [[general-path task-path & query-parts] *command-line-args*]
+  (try
+    (when-not (and general-path task-path)
+      (throw (js/Error. "usage: knowledge_lookup.cljk GENERAL.mith TASK.mith [query]")))
+    (let [general (compile-source general-path)
+          task (compile-source task-path)
+          rules (vec (concat (entries general) (entries task)))
+          query (str/lower-case (str/join " " query-parts))
+          words (set (remove str/blank? (str/split query #"[^a-zA-Z0-9]+")))
+          ranked (->> rules
+                      (map (fn [entry]
+                             (let [haystack (str/lower-case (str (:id entry) " " (:text entry)))
+                                   score (count (filter #(str/includes? haystack %) words))]
+                               (assoc entry :score score))))
+                      (filter #(or (empty? words) (pos? (:score %))))
+                      (sort-by (juxt (comp - :score) :id))
+                      (take (if (empty? words) (count rules) 8))
+                      vec)
+          class-edges (for [node (get-in task [:rdf-dataset "@graph"])
+                            :when (= "owl:Class" (field node "@type"))
+                            :let [parent (field node "subClassOf")]
+                            :when parent]
+                        (oak/triple (field node "@id") :rdfs/subClassOf parent))
+          subclass (oak/materialize :owl2-rl
+                     (conj (vec class-edges)
+                           (oak/triple "https://mithril.fund/id/bench/railway/example-section" :rdf/type
+                                       "https://mithril.fund/id/bench/railway/QualifyingSection")))
+          entailed? (contains? subclass
+                     (oak/triple "https://mithril.fund/id/bench/railway/example-section" :rdf/type
+                                 "http://data.arcrail.eu/ontology#SectionOfLine"))]
+      (when-not (and (>= (count (entries general)) 5)
+                     (>= (count (entries task)) 4) (>= (count class-edges) 5) entailed?)
+        (throw (js/Error. "knowledge source did not compile to retrievable rules and OWL entailment")))
+      (emit! {:general-digest (:graph-digest general)
+              :task-digest (:graph-digest task)
+              :general-rule-count (count (entries general))
+              :task-rule-count (count (entries task))
+              :task-subclass-edges (count class-edges)
+              :owl-entailed-section entailed?
+              :query query :matches ranked}))
+    (catch :default error
+      (emit! {:error (or (.-message error) (str error))})
+      (set! (.-exitCode js/process) 2))))

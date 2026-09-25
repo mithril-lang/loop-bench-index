@@ -1,0 +1,20 @@
+(mithril/ontology
+  :id "https://mithril.fund/id/ontology/terminal-agent-actions-v2"
+  :profile ["https://www.w3.org/TR/rdf11-concepts/" "https://www.w3.org/TR/owl2-profiles/#OWL_2_RL" "https://www.w3.org/TR/shacl/"]
+  :graph
+  [(owl/class :id "https://mithril.fund/id/class/TerminalTask")
+   (owl/class :id "https://mithril.fund/id/class/TerminalObservation")
+   (owl/class :id "https://mithril.fund/id/class/ProposedAction")
+   (owl/class :id "https://mithril.fund/id/class/InspectAction" :rdfs/sub-class-of "https://mithril.fund/id/class/ProposedAction")
+   (owl/class :id "https://mithril.fund/id/class/ModifyAction" :rdfs/sub-class-of "https://mithril.fund/id/class/ProposedAction")
+   (owl/class :id "https://mithril.fund/id/class/VerifyAction" :rdfs/sub-class-of "https://mithril.fund/id/class/ProposedAction")
+   (owl/class :id "https://mithril.fund/id/class/FinishAction" :rdfs/sub-class-of "https://mithril.fund/id/class/ProposedAction")
+   (owl/class :id "https://mithril.fund/id/class/TerminalEffect")
+   (owl/class :id "https://mithril.fund/id/class/TerminalState")
+   (owl/object-property :id "https://mithril.fund/id/property/hasObservation" :rdfs/domain "https://mithril.fund/id/class/TerminalTask" :rdfs/range "https://mithril.fund/id/class/TerminalObservation")
+   (owl/object-property :id "https://mithril.fund/id/property/proposesAction" :rdfs/domain "https://mithril.fund/id/class/TerminalObservation" :rdfs/range "https://mithril.fund/id/class/ProposedAction")
+   (owl/object-property :id "https://mithril.fund/id/property/producesEffect" :rdfs/domain "https://mithril.fund/id/class/ProposedAction" :rdfs/range "https://mithril.fund/id/class/TerminalEffect")
+   (owl/object-property :id "https://mithril.fund/id/property/advancesState" :rdfs/domain "https://mithril.fund/id/class/TerminalEffect" :rdfs/range "https://mithril.fund/id/class/TerminalState")
+   (shacl/node-shape :id "https://mithril.fund/id/shape/ProposedAction" :sh/target-class "https://mithril.fund/id/class/ProposedAction"
+     :sh/property [(shacl/property-shape :sh/path "https://mithril.fund/id/property/actionKind" :sh/min-count 1)
+                   (shacl/property-shape :sh/path "https://mithril.fund/id/property/commandText" :sh/min-count 1)])])

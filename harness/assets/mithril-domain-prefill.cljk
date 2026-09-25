@@ -1,0 +1,81 @@
+(ns terminal-bench.mithril-domain-prefill
+  (:require [clojure.string :as str]
+            [mithril.compiler :as compiler]
+            [oak.semantic :as oak]))
+
+(def fs (js/require "node:fs"))
+(defn read-json [path] (js->clj (.parse js/JSON (.readFileSync fs path "utf8"))))
+(defn emit! [value] (println (.stringify js/JSON (clj->js value))))
+(def root "https://mithril.fund/id/terminal-domain/")
+
+(defn expand [prefixes term]
+  (let [[prefix local] (str/split (str term) #":" 2)]
+    (if-let [base (get prefixes prefix)]
+      (str base local)
+      (when (re-matches #"https?://.+" (str term)) (str term)))))
+
+(defn class-form [iri parent]
+  (str "(owl/class :id " (pr-str iri)
+       (when parent (str " :rdfs/sub-class-of " (pr-str parent))) ")"))
+
+(defn node-form [kind index value]
+  (str "(rdf/node :id " (pr-str (str root kind "/" index))
+       " :rdf/type " (pr-str (str root kind))
+       " :text " (pr-str (subs (str value) 0 (min 1500 (count (str value))))) ")"))
+
+(let [[probe-path plan-path ontology-path] *command-line-args*]
+  (try
+    (let [probe (read-json probe-path)
+          plan (read-json plan-path)
+          prefixes (get probe "prefixes")
+          known (set (get probe "classes"))
+          focus (vec (filter known (get plan "focus_classes" [])))
+          classes (keep #(expand prefixes %) (get probe "classes"))
+          pairs (vec (keep (fn [[child parent]]
+                             (when-let [c (expand prefixes child)]
+                               (when-let [p (expand prefixes parent)] [c p])))
+                           (get probe "subclass")))
+          heads (map #(class-form % nil) classes)
+          edges (map (fn [[child parent]] (class-form child parent)) pairs)
+          kinds ["TaskGoal" "TaskConstraint" "TaskHypothesis" "TaskEvidence"]
+          research-root "https://mithril.fund/id/class/"
+          research (concat [(class-form (str research-root "ResearchState") nil)]
+                           (map #(class-form (str research-root %) (str research-root "ResearchState"))
+                                ["HypothesisState" "ExperimentState" "ReflectionState"
+                                 "VerificationState" "CompleteState"]))
+          nodes (concat research (map #(class-form (str root %) nil) kinds)
+                        heads edges
+                        (map-indexed (partial node-form "TaskGoal") (get plan "goals" []))
+                        (map-indexed (partial node-form "TaskConstraint") (get plan "constraints" []))
+                        (map-indexed (partial node-form "TaskHypothesis") (get plan "hypotheses" [])))
+          source (str "(mithril/ontology :id \"https://mithril.fund/id/ontology/terminal-task-domain-v1\" "
+                      ":profile [\"https://www.w3.org/TR/rdf11-concepts/\" "
+                      "\"https://www.w3.org/TR/owl2-profiles/#OWL_2_RL\" "
+                      "\"https://www.w3.org/TR/shacl/\"] :graph [\n"
+                      (str/join "\n" nodes) "\n])")
+          artifact (compiler/compile-ontology-text ontology-path source)
+          axioms (set (map (fn [[child parent]] (oak/triple child :rdfs/subClassOf parent)) pairs))
+          descendants
+          (into {}
+                (for [target focus
+                      :let [target-iri (expand prefixes target)]]
+                  [target
+                   (vec (sort
+                         (for [candidate (get probe "classes")
+                               :let [candidate-iri (expand prefixes candidate)
+                                     subject (str root "probe")
+                                     inferred (oak/materialize :owl2-rl
+                                                (conj axioms (oak/triple subject :rdf/type candidate-iri)))]
+                               :when (contains? inferred
+                                                (oak/triple subject :rdf/type target-iri))]
+                           candidate)))]))]
+      (.writeFileSync fs ontology-path source)
+      (emit! {:ontology-digest (:graph-digest artifact)
+              :source-class-count (count classes) :subclass-axioms (count pairs)
+              :goal-count (count (get plan "goals" []))
+              :hypothesis-count (count (get plan "hypotheses" []))
+              :focus-classes focus :entailed-descendants descendants
+              :unknown-focus (vec (remove known (get plan "focus_classes" [])))}))
+    (catch :default e
+      (emit! {:error (or (.-message e) (str e))})
+      (set! (.-exitCode js/process) 2))))

@@ -1,0 +1,34 @@
+(mithril/bot-profile
+  :id "https://mithril.fund/id/bot/terminal-bench-loop-v2"
+  :goal "https://mithril.fund/id/goal/governed-coding-task"
+  :ontology "1d1176b6103bd85952fb016b0e8bab9bb3f41286bb65fa3a6aebad6df795010b"
+  :process
+  (bpmn/process
+    :id "https://mithril.fund/id/bpmn/terminal-bench-loop-v2"
+    :ontology "1d1176b6103bd85952fb016b0e8bab9bb3f41286bb65fa3a6aebad6df795010b"
+    :nodes
+    [(bpmn/start-event :id "start")
+     (bpmn/exclusive-gateway :id "choose")
+     (bpmn/service-task :id "inspect" :action "https://mithril.fund/id/action/terminal/inspect")
+     (bpmn/service-task :id "modify" :action "https://mithril.fund/id/action/terminal/modify")
+     (bpmn/service-task :id "verify" :action "https://mithril.fund/id/action/terminal/verify")
+     (bpmn/service-task :id "finish" :action "https://mithril.fund/id/action/terminal/finish")
+     (bpmn/end-event :id "end")]
+    :flows
+    [(bpmn/sequence-flow :id "start-choose" :source "start" :target "choose" :condition "always")
+     (bpmn/sequence-flow :id "choose-inspect" :source "choose" :target "inspect" :condition "https://mithril.fund/id/action/terminal/inspect")
+     (bpmn/sequence-flow :id "choose-modify" :source "choose" :target "modify" :condition "https://mithril.fund/id/action/terminal/modify")
+     (bpmn/sequence-flow :id "choose-verify" :source "choose" :target "verify" :condition "https://mithril.fund/id/action/terminal/verify")
+     (bpmn/sequence-flow :id "choose-finish" :source "choose" :target "finish" :condition "https://mithril.fund/id/action/terminal/finish")
+     (bpmn/sequence-flow :id "inspect-choose" :source "inspect" :target "choose" :condition "always")
+     (bpmn/sequence-flow :id "modify-choose" :source "modify" :target "choose" :condition "always")
+     (bpmn/sequence-flow :id "verify-choose" :source "verify" :target "choose" :condition "always")
+     (bpmn/sequence-flow :id "finish-end" :source "finish" :target "end" :condition "always")])
+  :policy
+  (mithril/bot-policy
+    :max-steps 500 :max-retries 2 :lease-seconds 300 :confidence-floor 0
+    :actions ["https://mithril.fund/id/action/terminal/inspect"
+              "https://mithril.fund/id/action/terminal/modify"
+              "https://mithril.fund/id/action/terminal/verify"
+              "https://mithril.fund/id/action/terminal/finish"]
+    :effects ["terminal/inspect" "terminal/modify" "terminal/verify" "agent/stop"]))
