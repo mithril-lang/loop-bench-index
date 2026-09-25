@@ -105,3 +105,42 @@ class FailedAttempts(unittest.TestCase):
         self.assertEqual((record['status'], record['partial'], record['estimated_cost_usd']), ('TimeoutError', True, None))
         ok = json.loads((d / 'call-001.json').read_text())
         self.assertEqual((ok['input_tokens'], ok['cache_read_tokens'], ok['estimated_cost_usd']), (10, 90, 0.001))
+
+
+class Deadline(unittest.TestCase):
+    def test_deadline_bounds_a_request_that_never_returns(self):
+        import asyncio
+        import threading
+        import time as _time
+        from mithril_harness import chat
+        release = threading.Event()
+        def stuck(*_):
+            release.wait(30)
+            return 'late'
+        started = _time.monotonic()
+        with self.assertRaises(chat.DeadlineExceeded):
+            asyncio.run(chat.call_with_deadline(stuck, deadline=1))
+        self.assertLess(_time.monotonic() - started, 5)
+        release.set()
+
+    def test_thread_errors_pass_through_unchanged(self):
+        import asyncio
+        from mithril_harness import chat
+        def boom(*_):
+            raise TimeoutError('socket read timed out')
+        with self.assertRaises(TimeoutError) as caught:
+            asyncio.run(chat.call_with_deadline(boom, deadline=5))
+        self.assertNotIsInstance(caught.exception, chat.DeadlineExceeded)
+
+
+class MultiAction(unittest.TestCase):
+    def test_chat_transport_executes_the_first_of_several_actions(self):
+        import asyncio
+        agent = type('C', (lanes.ReactLane,), {'transport': 'chat'})(logs_dir=Path(tempfile.mkdtemp()))
+        raw = ('{"action":"modify","command":"cat > /app/a.py"} then {"action":"verify","command":"python3 /app/a.py"} '
+               'and finally {"action":"finish","command":"true"}')
+        action = asyncio.run(agent.parse_action(raw, 1))
+        self.assertEqual(action['action'], 'modify')
+        self.assertEqual(agent.multi_action_replies, 1)
+        hermes = type('H', (lanes.ReactLane,), {'transport': 'hermes'})(logs_dir=Path(tempfile.mkdtemp()))
+        self.assertEqual(asyncio.run(hermes.parse_action(raw, 1))['action'], 'finish')  # frozen v6 behaviour

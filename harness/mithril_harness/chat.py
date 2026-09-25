@@ -16,6 +16,7 @@ tokens, and `estimated_cost_usd` is the provider-reported cost.
 import asyncio
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -44,6 +45,43 @@ def _post(body, key, timeout):
         return json.load(response)
 
 
+MAX_OUTPUT_TOKENS = int(os.environ.get('BENCH_MAX_OUTPUT_TOKENS', '16384'))
+REQUEST_DEADLINE = int(os.environ.get('BENCH_REQUEST_DEADLINE', '240'))
+
+
+class DeadlineExceeded(Exception):
+    pass
+
+
+async def call_with_deadline(fn, *args, deadline):
+    """Run a blocking call in a daemon thread and stop waiting after `deadline`
+    seconds of wall time. A socket read timeout does not bound a request whose
+    server keeps sending bytes: two requests ran 401 s and 475 s past a 120 s
+    read timeout (both hit the 65,536-token output limit). The abandoned
+    thread is a daemon, so it cannot hold the process open at exit."""
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+
+    def run():
+        # Wrapped, not raised into the future: a TimeoutError from the socket must
+        # stay distinguishable from our own deadline (asyncio.TimeoutError is the
+        # builtin TimeoutError since Python 3.11).
+        try:
+            outcome = ('ok', fn(*args))
+        except BaseException as exc:
+            outcome = ('error', exc)
+        loop.call_soon_threadsafe(lambda o=outcome: future.done() or future.set_result(o))
+
+    threading.Thread(target=run, daemon=True).start()
+    try:
+        kind, value = await asyncio.wait_for(asyncio.shield(future), deadline)
+    except asyncio.TimeoutError:
+        raise DeadlineExceeded(f'no response within {deadline} s')
+    if kind == 'error':
+        raise value
+    return value
+
+
 def usage_record(result, wall):
     u = result.get('usage') or {}
     prompt = u.get('prompt_tokens') or 0
@@ -68,20 +106,20 @@ async def chat_complete(messages, usage_path, model=None, reasoning=None,
     terminal action has run for this call, so a retry repeats nothing."""
     body = {'model': model or os.environ.get('BENCH_MODEL', 'openai/gpt-6-luna'),
             'reasoning': {'effort': reasoning or os.environ.get('BENCH_REASONING', 'medium')},
-            'usage': {'include': True}, 'messages': messages}
+            'usage': {'include': True}, 'max_tokens': MAX_OUTPUT_TOKENS, 'messages': messages}
     key = openrouter_key()
     failures = []
     for attempt in range(3):
         started = time.monotonic()
         try:
-            result = await asyncio.to_thread(_post, body, key, timeout)
+            result = await call_with_deadline(_post, body, key, timeout, deadline=REQUEST_DEADLINE)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors='replace')[-600:]
             failures.append({'status': exc.code, 'detail': detail})
             retry = exc.code in RETRYABLE
             _failed(usage_path, attempt, {'transport': 'chat', 'completed': False, 'partial': True, 'status': exc.code,
                                           'wall_seconds': round(time.monotonic() - started, 3), 'estimated_cost_usd': None})
-        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError, DeadlineExceeded) as exc:
             failures.append({'status': None, 'detail': str(exc)[-600:]})
             retry = True
             # tokens and cost of an abandoned request are unknown: recorded as missing, never as zero
@@ -92,7 +130,11 @@ async def chat_complete(messages, usage_path, model=None, reasoning=None,
             choice = (result.get('choices') or [{}])[0]
             text = (choice.get('message') or {}).get('content')
             if isinstance(text, str) and text.strip():
-                Path(usage_path).write_text(json.dumps(usage_record(result, time.monotonic() - started)))
+                record = usage_record(result, time.monotonic() - started)
+                record['finish_reason'] = choice.get('finish_reason')
+                Path(usage_path).write_text(json.dumps(record))
+                # raw reply, private run data: lets a parse decision be checked afterwards
+                Path(usage_path).with_suffix('.reply.txt').write_text(text)
                 return text
             failures.append({'status': 'empty', 'detail': json.dumps(choice)[-600:]})
             _failed(usage_path, attempt, dict(usage_record(result, time.monotonic() - started), completed=False, partial=True))

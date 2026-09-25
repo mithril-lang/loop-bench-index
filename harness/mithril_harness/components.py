@@ -339,6 +339,7 @@ class AutoAcceptance:
         started = time.monotonic()
         try:
             check = await environment.exec(command=acceptance_command(self.acceptance_spec), timeout_sec=300)
+            self.acceptance_wall_seconds = getattr(self, 'acceptance_wall_seconds', 0.0) + time.monotonic() - started
             exit_code, out, err = check.return_code, check.stdout or '', check.stderr or ''
         except RuntimeError as exc:
             if 'timed out' not in str(exc).lower():

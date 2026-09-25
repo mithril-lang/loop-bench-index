@@ -128,6 +128,24 @@ class MithrilServer:
                 await self.proc.wait()
 
 
+def json_objects(raw, accept):
+    """Every JSON object in `raw` accepted by `accept`, in order (overlapping
+    starts inside an accepted object are skipped)."""
+    decoder = json.JSONDecoder(); found = []; i = 0
+    while i < len(raw):
+        if raw[i] == '{':
+            try:
+                candidate, end = decoder.raw_decode(strip_trailing_json_commas(raw[i:]))
+                if isinstance(candidate, dict) and accept(candidate):
+                    found.append(candidate)
+                    i += max(end, 1)
+                    continue
+            except json.JSONDecodeError:
+                pass
+        i += 1
+    return found
+
+
 def last_json_object(raw, accept):
     decoder = json.JSONDecoder(); found = None
     for i, ch in enumerate(raw):
@@ -486,6 +504,15 @@ class HarnessLoop(BaseAgent):
 
     async def parse_action(self, raw, n):
         valid = lambda c: c.get('action') in ACTIONS
+        if self.transport == 'chat':
+            # A reply may hold a whole multi-step plan. The Hermes path takes the
+            # last action (frozen v6 behaviour); the chat transport executes the
+            # first one and counts the event, since the rest were written blind.
+            actions = [a for a in json_objects(raw, valid) if isinstance(a.get('command'), str)]
+            if len(actions) > 1:
+                self.multi_action_replies = getattr(self, 'multi_action_replies', 0) + 1
+            if actions:
+                return actions[0]
         action = last_json_object(raw, valid)
         if action is None:
             repair_prompt = ('Repair this malformed JSON action without changing its intended command or meaning. '
@@ -626,6 +653,7 @@ class HarnessLoop(BaseAgent):
             'artifact_count_confirmed': len(self.created_artifacts),
             'harness_version': self.version(), 'harness_lane': self.lane_id, 'transport': self.transport,
             'mithril_resident': self.mithril_resident,
+            'multi_action_replies': getattr(self, 'multi_action_replies', 0),
             'cache_read_tokens': sm('cache_read_tokens'), 'uncached_input_tokens': sm('input_tokens') + sm('cache_write_tokens'),
             'provider_api_calls': sm('api_calls')}
         context.metadata.update(self.extra_metadata())

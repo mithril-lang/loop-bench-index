@@ -1,0 +1,136 @@
+{
+  "loops": [
+    {
+      "report": "/var/folders/h_/bx1m0lv90qxb1sdrx5tqn8b80000gn/T/cmp2-d3-401/report.json",
+      "loop_wall_seconds": 601.219,
+      "seeds": [
+        401,
+        402,
+        403,
+        404
+      ]
+    },
+    {
+      "report": "/var/folders/h_/bx1m0lv90qxb1sdrx5tqn8b80000gn/T/cmp2-d3-405/report.json",
+      "loop_wall_seconds": 395.042,
+      "seeds": [
+        405,
+        406,
+        407,
+        408
+      ]
+    },
+    {
+      "report": "/var/folders/h_/bx1m0lv90qxb1sdrx5tqn8b80000gn/T/cmp2-d3-409/report.json",
+      "loop_wall_seconds": 584.265,
+      "seeds": [
+        409,
+        410,
+        411,
+        412
+      ]
+    }
+  ],
+  "seeds": [
+    401,
+    402,
+    403,
+    404,
+    405,
+    406,
+    407,
+    408,
+    409,
+    410,
+    411,
+    412
+  ],
+  "lanes": {
+    "auto-acceptance": {
+      "trials": 12,
+      "measured": 12,
+      "not_measured": [],
+      "successes": 8,
+      "success_rate": 0.6667,
+      "mean_assertion_fraction": 0.9359,
+      "finished_rate": 0.6667,
+      "timeouts": 2,
+      "cost_usd": 0.172386,
+      "cost_per_success_usd": 0.021548,
+      "median_trial_wall_seconds": 395.839,
+      "median_steps": 15.5,
+      "cache_hit_ratio": 0.8956,
+      "output_tokens": 215934
+    },
+    "mithril": {
+      "trials": 12,
+      "measured": 12,
+      "not_measured": [],
+      "successes": 9,
+      "success_rate": 0.75,
+      "mean_assertion_fraction": 0.9487,
+      "finished_rate": 0.3333,
+      "timeouts": 0,
+      "cost_usd": 0.175923,
+      "cost_per_success_usd": 0.019547,
+      "median_trial_wall_seconds": 353.217,
+      "median_steps": 20.0,
+      "cache_hit_ratio": 0.9013,
+      "output_tokens": 202703
+    },
+    "react": {
+      "trials": 12,
+      "measured": 11,
+      "not_measured": [
+        [
+          402,
+          "deadline"
+        ]
+      ],
+      "successes": 9,
+      "success_rate": 0.8182,
+      "mean_assertion_fraction": 0.979,
+      "finished_rate": 0.9091,
+      "timeouts": 0,
+      "cost_usd": 0.115358,
+      "cost_per_success_usd": 0.012818,
+      "median_trial_wall_seconds": 237.447,
+      "median_steps": 11,
+      "cache_hit_ratio": 0.8808,
+      "output_tokens": 150612
+    }
+  },
+  "pairs": {
+    "auto-acceptance vs mithril": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_auto-acceptance": 3,
+      "success_only_mithril": 4,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_mithril_minus_auto-acceptance": 0.0128,
+      "mean_cost_diff_usd_mithril_minus_auto-acceptance": 0.000295
+    },
+    "auto-acceptance vs react": {
+      "paired_seeds": 11,
+      "excluded_seeds": [
+        402
+      ],
+      "success_only_auto-acceptance": 1,
+      "success_only_react": 3,
+      "mcnemar_exact_p": 0.625,
+      "mean_assertion_fraction_diff_react_minus_auto-acceptance": 0.049,
+      "mean_cost_diff_usd_react_minus_auto-acceptance": -0.004267
+    },
+    "mithril vs react": {
+      "paired_seeds": 11,
+      "excluded_seeds": [
+        402
+      ],
+      "success_only_mithril": 2,
+      "success_only_react": 3,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_react_minus_mithril": 0.035,
+      "mean_cost_diff_usd_react_minus_mithril": -0.004149
+    }
+  }
+}
