@@ -13,6 +13,7 @@ container when two Harbor jobs overlapped; see results/knowledge-ablation-2026-0
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,16 @@ def lane_registry():
     registry = source[source.index('LANES = {'):]
     exec(compile(registry, 'lanes.py', 'exec'), {}, namespace)
     return namespace['LANES'], namespace['PLANNED']
+
+
+def require_tools():
+    """Harbor needs a resolvable `docker` (the Podman shim) and podman-compose."""
+    docker = shutil.which('docker')
+    if not docker or not os.path.exists(os.path.realpath(docker)):
+        raise RuntimeError(f'REFUSE: docker shim missing or dangling: {docker}')
+    compose = os.environ.get('PODMAN_COMPOSE_BIN')
+    if docker and 'docker-podman-compat' in os.path.realpath(docker) and not (compose and os.path.exists(compose)):
+        raise RuntimeError(f'REFUSE: PODMAN_COMPOSE_BIN missing: {compose}')
 
 
 def require_idle_podman():
@@ -70,6 +81,7 @@ def main():
             raise RuntimeError(f'REFUSE: unknown lane {lane}')
     if not args.task.is_dir() or args.max_steps < 1 or not chosen:
         raise RuntimeError('REFUSE: task directory, step cap, or lane list invalid')
+    require_tools()
     require_idle_podman()
     classpath = os.environ.get('MITHRIL_CLASSPATH') or subprocess.run(
         [os.environ.get('KBB_BIN', 'kbb'), '-Spath'], cwd=RUNTIME, capture_output=True, text=True,
