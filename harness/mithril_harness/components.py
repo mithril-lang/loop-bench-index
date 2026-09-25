@@ -10,9 +10,11 @@ named by the role it plays in the derived model (see harness/README.md):
 - SchemaCard          a deterministic profile of the target environment's own ontology and data
 - InvariantCheck      after each modify, necessary conditions derived from the data (failure case FC-03)
 - RequirementGate     finish only when every extracted requirement has a passing agent-written test
+- IndependentReview   at finish, acceptance tests written from the specification alone by a fresh model call
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import os
@@ -602,4 +604,74 @@ class RequirementGate:
                      'requirement_origin': getattr(self, 'requirement_origin', None),
                      'gate_refusals': self.gate_refusal_count,
                      'gate_overridden': self.gate_overridden, 'gate_reports': self.gate_reports[-3:]})
+        return data
+
+
+from . import review as acceptance_review
+
+
+class IndependentReview:
+    """At the first finish attempt, a fresh single-turn model call writes
+    acceptance tests from the specification alone (no code, no transcript).
+    The harness runs them against the deliverable and holds finish while
+    undisputed tests fail, for at most `max_review_rounds` rounds."""
+    max_review_rounds = 2
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.review_rounds = 0
+        self.review_reports = []
+        self.review_ready = False
+
+    async def run(self, instruction, environment, context):
+        self.review_instruction = instruction
+        return await super().run(instruction, environment, context)
+
+    async def prepare_review(self, environment):
+        docs = {}
+        for path in referenced_docs(self.review_instruction)[:6]:
+            r = await environment.exec(command=f'head -c 20000 {shlex.quote(path)} 2>/dev/null', timeout_sec=30)
+            if r.return_code == 0 and (r.stdout or '').strip():
+                docs[path] = r.stdout
+        listing = await environment.exec(command="find /app -maxdepth 3 -not -path '*/.*' 2>/dev/null | head -150",
+                                         timeout_sec=30)
+        prompt = (acceptance_review.PROMPT + 'TASK:\n' + self.review_instruction
+                  + ''.join(f'\n\nDOCUMENT {p}:\n{t}' for p, t in docs.items())
+                  + '\n\nFILE NAMES UNDER /app:\n' + (listing.stdout or ''))
+        reply = await self.hermes_call(prompt, self.usage_dir / f'call-{len(self.calls):03}-review.json', 'review')
+        code = acceptance_review.extract_code(reply)
+        if not code:
+            return False
+        encoded = base64.b64encode(code.encode()).decode()
+        d = acceptance_review.TEST_DIR
+        r = await environment.exec(command=f'mkdir -p {d} && echo {encoded} | base64 -d > {d}/test_review.py', timeout_sec=30)
+        return r.return_code == 0
+
+    async def finish_refusal(self, environment, instruction):
+        if self.review_rounds >= self.max_review_rounds:
+            return await super().finish_refusal(environment, instruction)
+        if not self.review_ready:
+            self.review_ready = await self.prepare_review(environment)
+            if not self.review_ready:
+                self.review_rounds = self.max_review_rounds  # no usable review: do not block
+                self.review_reports.append({'error': 'no test file from reviewer'})
+                return await super().finish_refusal(environment, instruction)
+        command = f"python3 - {acceptance_review.TEST_DIR} <<'PY'\n{acceptance_review.RUN_SCRIPT}\nPY"
+        try:
+            r = await environment.exec(command=command, timeout_sec=150)
+            report = json.loads((r.stdout or '').strip().splitlines()[-1])
+        except (RuntimeError, ValueError, IndexError) as exc:
+            report = {'error': str(exc)[-300:], 'open': []}
+        self.review_reports.append({k: report.get(k) for k in ('passed', 'failed', 'disputed', 'open', 'collected', 'error')})
+        if not report.get('open'):
+            return await super().finish_refusal(environment, instruction)
+        self.review_rounds += 1
+        return ('Finish held by an independent acceptance review: tests written from the specification alone (without '
+                'your code) fail: ' + ', '.join(report['open']) + '. Fix the deliverable, or if a test contradicts the '
+                'specification, add `test_name: reason` to /tmp/review_tests/DISPUTED.txt. The tests are in '
+                '/tmp/review_tests/test_review.py. pytest output tail:\n' + (report.get('tail') or '')[-1800:])
+
+    def extra_metadata(self):
+        data = dict(super().extra_metadata())
+        data.update({'review_rounds': self.review_rounds, 'review_reports': self.review_reports[-3:]})
         return data

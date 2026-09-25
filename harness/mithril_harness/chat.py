@@ -110,6 +110,10 @@ async def chat_complete(messages, usage_path, model=None, reasoning=None,
     key = openrouter_key()
     failures = []
     for attempt in range(3):
+        if failures and failures[-1].get('status') == 'empty':
+            # an identical retry of an empty reply tends to stay empty: add one short note, on a copy
+            body = dict(body, messages=list(messages) + [{'role': 'user', 'content':
+                    'Your previous reply was empty. Reply now with the requested output only.'}])
         started = time.monotonic()
         try:
             result = await call_with_deadline(_post, body, key, timeout, deadline=REQUEST_DEADLINE)
