@@ -26,6 +26,7 @@ measured before any part of it can be called optimal.
 | E7 | Cutting replayed history alone | v4: −89% history chars, both lanes stuck in `inspect`, no artifact | v4 report |
 | E8 | Cost of the symbolic layer | Mithril helper 222–465 s per trial (17–25% of agent wall); ~36 s per action otherwise | v7 report |
 | E9 | Mithril's own action model | The runtime defines a typed semantic delta (`assert / retract / query / infer / compile / stop`) and notes that a Jev-like policy may select operation and arguments without a text decoder | `mithril-lang/mithril` README |
+| E11 | Differential judge as an agent lane (admission pair, one trial each) | 9/13 in both lanes. The judge passed twice while the verifier failed: the derivation shared the answer's error. Judge lane: 69% of tokens, 74% of cost, 32 vs 48 steps, with equal failure | [judge-a report](harness-judge-a-2026-09-25/report.md) |
 | E10 | Co-scientist judges in this workspace | `yui/coscientist.kotoba` and `sha256d/evolve.cljk` rank with deterministic Elo whose fitness is a measurement, never an LLM debate | those repositories |
 
 Two claims in the supplied material were **not** used as evidence. TypeSafe's
@@ -53,10 +54,12 @@ citation describes this harness.
 
 - **H0** — measured: 9/13 (E1). Baseline. Every other candidate must beat it on
   success before cost.
-- **H1** — supported in mechanism (E2): the only discriminating signal observed
-  was a differential. Not yet measured as an agent lane. The run is in progress
-  and will be reported separately. Risk: the agent's derivation can share the
-  answer's misunderstanding.
+- **H1** — supported in mechanism (E2), but **insufficient as a judge by
+  itself** (E11). In the admission pair, the agent's own derivation agreed with
+  its wrong answer twice (6 and 2 rows). The verifier then failed the same four
+  assertions. A self-built agreeing derivation is weak evidence. It becomes a
+  judge only when paired with a source of disagreement that does not come from
+  the same reading of the task (H3's axiom-delta alternatives, H6's population).
 - **H2 as stated** — **refuted for this loop.** Choosing among tools presupposes
   a finite action set. E6 shows every action was a newly generated command,
   so there was no earlier command to pick again. Jev is cheap (E5), but if
@@ -102,9 +105,9 @@ met at least once.
 
 | Rank | Candidate | 1: binding constraint | 2: prerequisites measured | 3: fewer LLM calls |
 |---|---|---|---|---|
-| 1 | H1 judge | yes (E2) | yes (implemented, tested) | no (adds steps) |
-| 2 | H3 typed action IR | enables H5/H6 | coverage measurable offline | yes, bounded by coverage |
-| 3 | H6 population on OR-nodes | yes, given H1 | needs judge–verifier agreement | no |
+| 1 | H3 typed action IR, incl. axiom-delta alternatives | yes: supplies disagreement H1 lacked (E11) | coverage measurable offline | yes, bounded by coverage |
+| 2 | H6 population on OR-nodes, forced to differ in interpretation | yes, with H1 as leaf score | H1 implemented; agreement ≠ correctness (E11) | no |
+| 3 | H1 judge as leaf score (not finish permission) | necessary, not sufficient (E11) | implemented, measured once | no (adds steps) |
 | 4 | H5 best-first AND/OR | yes, given H1+H3 | needs H3 | yes |
 | 5 | H8 policy (IG + costs, α=0 until calibrated) | indirect | IG/cost yes, P no | yes |
 | 6 | H4 belief-graph context | no (cost) | needs state-carriage proof (E7) | yes (tokens) |
@@ -143,7 +146,10 @@ met at least once.
 
 **Judge and ranking.**
 - A leaf's value is measured: execution, source preservation, SHACL, and the
-  differential (exit 0/1/2).
+  differential (exit 0/1/2). A differential exit 0 is a leaf score, not
+  permission to finish (E11). Finish also requires that no surviving
+  OR-candidate with a different interpretation passes the same checks with
+  different rows.
 - OR-children are ranked by deterministic Elo on the discriminating rows
   (port `yui/coscientist.kotoba`).
 - An LLM tie-break is allowed only when labelled as one.
@@ -167,7 +173,8 @@ state-carriage test in H4 passes.
 
 **Stop.**
 - Finish when every AND child has an OR child with judge exit 0 and unchanged
-  artifacts.
+  artifacts, and every competing interpretation on that child has been refuted
+  by a source-grounded row difference.
 - Otherwise, when the budget is exhausted, submit the Elo leader and record why.
 
 A budget controller (H7) is added only once success-qualified costs exist.
@@ -179,7 +186,7 @@ ladder. The runner refuses a `PLANNED` lane until its prerequisite is recorded.
 
 | Step | Lane | Prerequisite (measured before admission) | Falsified if |
 |---|---|---|---|
-| 1 | `judge` (H1) | implemented; running on the contaminated task as harness admission | judge exit 0 while the verifier fails, on held-out tasks (judge–verifier disagreement) |
+| 1 | `judge` (H1) | implemented; admission pair run | judge exit 0 while the verifier fails. **Observed on the admission pair (E11).** Kept as a leaf score only |
 | 2 | `typed-actions` (H3) | offline coverage of the 146 logged actions by the typed library | coverage too low to remove any LLM call |
 | 3 | `population` (H6) | judge–verifier agreement from step 1 | on held-out tasks, no success gain over `judge` at a matched token budget |
 | 4 | `jev-policy` (H2 on H3, H5, H8) | typed coverage; Jev calibration error on logged decisions | success lower than step 3, or LLM calls not reduced |
@@ -199,5 +206,7 @@ Metrics per lane:
   admission for each rung.
 
 The next action that needs no model spend is rung 2's measurement. Define the
-typed library from the Mithril action ontology and classify the 146 logged
-actions against it.
+typed library from the Mithril action ontology, and classify the 146 logged
+actions plus the 63 of the judge pair against it. Include in the library the
+axiom-delta operation that turns one task reading into competing candidates.
+E11 shows that source of disagreement is what the judge lacked.

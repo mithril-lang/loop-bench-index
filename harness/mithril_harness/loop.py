@@ -83,6 +83,7 @@ class HarnessLoop(BaseAgent):
     source probe + prefill, OWL/SHACL task state, BPMN admission, inspect
     budget, critical review and the required-artifact finish check."""
     lane = 'baseline'
+    lane_id = None
     semantic = False
 
     @staticmethod
@@ -440,5 +441,5 @@ class HarnessLoop(BaseAgent):
             'mithril_wall_seconds': round(self.mith_wall_seconds, 3),
             'prompt_chars_total': sum(self.prompt_chars), 'required_artifacts': required,
             'artifact_count_confirmed': len(self.created_artifacts),
-            'harness_version': self.version()}
+            'harness_version': self.version(), 'harness_lane': self.lane_id}
         context.metadata.update(self.extra_metadata())

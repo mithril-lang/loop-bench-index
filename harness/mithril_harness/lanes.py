@@ -11,6 +11,7 @@ from .loop import HarnessLoop
 
 
 class ReactLane(HarnessLoop):
+    lane_id = 'react'
     lane = 'baseline'
     semantic = False
     @staticmethod
@@ -18,6 +19,7 @@ class ReactLane(HarnessLoop):
 
 
 class MithrilLane(HarnessLoop):
+    lane_id = 'mithril'
     lane = 'mithril'
     semantic = True
     @staticmethod
@@ -25,27 +27,32 @@ class MithrilLane(HarnessLoop):
 
 
 class KnowledgeLane(KnowledgeRetrieval, MithrilLane):
+    lane_id = 'knowledge'
     @staticmethod
     def name(): return 'mithril-precompiled-knowledge-gpt6-luna-terminal-loop'
 
 
 class JevV7Lane(JevPriority, MithrilLane):
+    lane_id = 'jev-v7'
     @staticmethod
     def name(): return 'mithril-jev-interleaved-gpt6-luna-terminal-loop'
 
 
 class JevNeutralLane(JevPriority, MithrilLane):
+    lane_id = 'jev-neutral'
     jev_instruction = JEV_NEUTRAL_INSTRUCTION
     @staticmethod
     def name(): return 'mithril-jev-neutral-gpt6-luna-terminal-loop'
 
 
 class KnowledgeJevLane(KnowledgeRetrieval, JevPriority, MithrilLane):
+    lane_id = 'knowledge-jev'
     @staticmethod
     def name(): return 'mithril-precompiled-knowledge-jev-gpt6-luna-terminal-loop'
 
 
 class JudgeLane(DifferentialJudge, MithrilLane):
+    lane_id = 'judge'
     @staticmethod
     def name(): return 'mithril-differential-gate-gpt6-luna-terminal-loop'
 
