@@ -77,12 +77,19 @@ class Scripted:
         self.jev_states = []
         self.jev_instructions = []
         self.jev_count = 0
+        self.chat_messages_log = []
 
     async def hermes_call(self, prompt, usage, kind):
         self.prompts.append((kind, prompt))
         self.calls.append({'usage_file': str(usage), 'exit_code': 0, 'kind': kind})
         if kind == 'prefill':
             return 'plan: ' + json.dumps(PLAN)
+        return self.replies.pop(0)
+
+    async def chat_call(self, messages, usage, kind):
+        self.chat_messages_log.append(messages)
+        self.prompts.append((kind, messages[-1]['content']))
+        self.calls.append({'usage_file': str(usage), 'exit_code': 0, 'kind': kind})
         return self.replies.pop(0)
 
     async def mith(self, op, action='', outcome='true'):

@@ -6,7 +6,7 @@ the frozen source it reproduces (checked by tests/test_equivalence.py).
 they stay out of the runner until their prerequisites are measured.
 """
 
-from .components import DifferentialJudge, JevPriority, JEV_NEUTRAL_INSTRUCTION, KnowledgeRetrieval
+from .components import AutoAcceptance, DifferentialJudge, JevPriority, JEV_NEUTRAL_INSTRUCTION, KnowledgeRetrieval
 from .loop import HarnessLoop
 
 
@@ -57,6 +57,12 @@ class JudgeLane(DifferentialJudge, MithrilLane):
     def name(): return 'mithril-differential-gate-gpt6-luna-terminal-loop'
 
 
+class AutoAcceptanceLane(AutoAcceptance, MithrilLane):
+    lane_id = 'auto-acceptance'
+    @staticmethod
+    def name(): return 'mithril-auto-acceptance-gpt6-luna-terminal-loop'
+
+
 LANES = {
     'react':          {'import': 'mithril_harness.lanes:ReactLane', 'adds': [],
                        'reproduces': 'bench/terminal_bench_v6/agent.py:HermesBaselineAgent'},
@@ -75,15 +81,14 @@ LANES = {
                        'task_assisted': True},
     'judge':          {'import': 'mithril_harness.lanes:JudgeLane', 'adds': ['semantic-layer', 'differential-judge'],
                        'reproduces': None},
+    'auto-acceptance': {'import': 'mithril_harness.lanes:AutoAcceptanceLane',
+                        'adds': ['semantic-layer', 'typed-acceptance-prefill', 'acceptance-after-modify'],
+                        'reproduces': None},
 }
 
 # Derived-model lanes (harness/README.md). Each names what must be measured
 # before it may be implemented and admitted to the runner.
 PLANNED = {
-    'auto-acceptance': {'adds': ['typed-action-ir', 'acceptance-after-modify'],
-                        'requires': 'acceptance parameters (entrypoint, bundles, queries, columns) derived from the '
-                                    'instruction by a typed prefill; coverage measured in '
-                                    'results/typed-action-coverage-2026-09-25 (20.6-58.3% pure)'},
     'typed-actions': {'adds': ['typed-action-ir'],
                       'requires': 'a policy that chooses pure operations; coverage measured (20.6-58.3% pure)'},
     'belief-context': {'adds': ['belief-graph-context'],

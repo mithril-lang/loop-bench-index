@@ -57,6 +57,10 @@ composable components (knowledge, Jev priority, differential judge) and a lane
 registry, byte-equivalent to the frozen v6/v7 agents it reproduces. Its target
 model is derived in [the harness model derivation](results/harness-model-derivation-2026-09-25.md).
 
+The [10-minute verification loop](results/micro-loop-2026-09-25/report.md)
+runs harness lanes on seeded railmini micro tasks in parallel, with a
+prompt-cache-aware chat transport and a resident Mithril helper.
+
 ## AA-Briefcase-Lite exploratory cohort
 
 `results/aa-briefcase-lite-w1-t1-gpt6-luna-v1/` records one retrospective

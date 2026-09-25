@@ -1,0 +1,18 @@
+PREFIX rl: <http://example.org/rail#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?pointId (COUNT(DISTINCT ?section) AS ?qualifyingSectionCount) (COUNT(DISTINCT ?vehicle) AS ?vehicleCount)
+       (MAX(?kv) AS ?maxVoltageKv)
+WHERE {
+  { SELECT ?p ?pointId WHERE {
+      ?p a rl:OperationalPoint ; rl:opId ?pointId ; rl:inCountry ?c .
+      FILTER(STRSTARTS(STR(?p), "urn:physical:"))
+    } GROUP BY ?p ?pointId HAVING (COUNT(DISTINCT ?c) >= 2) }
+  { ?section rl:startsAt ?p } UNION { ?section rl:endsAt ?p }
+  ?section rl:nominalVoltage ?kv . FILTER(datatype(?kv) = xsd:decimal && ?kv >= 15)
+  { SELECT ?section WHERE {
+      ?a rl:forSection ?section ; rl:vehicle ?v ; rl:validUntil ?u . FILTER(?u >= "2031-06-30"^^xsd:date)
+    } GROUP BY ?section HAVING (COUNT(DISTINCT ?v) >= 2) }
+  ?auth rl:forSection ?section ; rl:vehicle ?vehicle ; rl:validUntil ?until . FILTER(?until >= "2031-06-30"^^xsd:date)
+}
+GROUP BY ?pointId
+ORDER BY ?pointId

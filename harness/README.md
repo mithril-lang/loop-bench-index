@@ -20,7 +20,8 @@ harness/
   tools/
     action_coverage.py  classify logged actions against the library (strict / signature)
   assets/            Mithril helpers and ontologies (byte-identical copies of v6/v7)
-  run.py             sequential lane runner with verifier and checksum refusals
+  run.py             sequential Harbor lane runner with verifier and checksum refusals
+  micro/             railmini micro tasks, verifier, controls, 10-minute parallel runner
   tests/             equivalence, judge-lane, differential tests and scripted doubles
 ```
 
@@ -116,7 +117,20 @@ PYTHONPATH=harness/tests <harbor-venv>/bin/python -m unittest \
   failed sides, the duplicate-count boundary, and the independence and coverage
   refusal literals.
 
-## Run
+## Fast loop (under 10 minutes)
+
+```sh
+podman build -t localhost/harness-micro:rdflib-7.1.4 harness/micro
+<harbor-venv>/bin/python harness/micro/run_micro.py --lanes mithril,auto-acceptance \
+  --seeds 301,302,303 --difficulty 3 --output /private/dir --max-steps 12
+```
+
+Defaults: `--transport chat` (direct OpenRouter, append-only messages for
+prompt caching), resident Mithril (`--mithril-cli` to disable), a 500 s trial
+cap and a 600 s loop deadline. See
+[results/micro-loop-2026-09-25](../results/micro-loop-2026-09-25/report.md).
+
+## Run on Terminal-Bench
 
 Use the v4 Podman setup: the `docker` shim first on `PATH`, and
 `PODMAN_COMPOSE_BIN` set. Then:

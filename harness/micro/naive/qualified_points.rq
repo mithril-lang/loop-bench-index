@@ -1,0 +1,11 @@
+PREFIX rl: <http://example.org/rail#>
+SELECT ?pointId (COUNT(DISTINCT ?section) AS ?qualifyingSectionCount) (COUNT(DISTINCT ?vehicle) AS ?vehicleCount)
+       (MAX(?v) AS ?maxVoltageKv)
+WHERE {
+  ?p a rl:OperationalPoint ; rl:opId ?pointId .
+  { ?section rl:startsAt ?p } UNION { ?section rl:endsAt ?p }
+  ?section rl:nominalVoltage ?v .
+  ?auth rl:forSection ?section ; rl:vehicle ?vehicle .
+}
+GROUP BY ?pointId
+ORDER BY ?pointId

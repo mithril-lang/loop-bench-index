@@ -24,6 +24,8 @@ from pathlib import Path
 
 from harbor.agents.base import BaseAgent
 
+from .chat import chat_complete
+
 ASSETS = Path(__file__).resolve().parents[1] / 'assets'
 HERMES = os.environ.get('HERMES_BIN', '/Users/junkawasaki/.hermes/hermes-agent/venv/bin/hermes')
 KBB = os.environ.get('KBB_BIN', '/opt/homebrew/bin/kbb')
@@ -35,6 +37,8 @@ ONTOLOGY = ASSETS / 'terminal-actions-v2.mith'
 TASK_HELPER = ASSETS / 'mithril-task-state.cljk'
 PREFILL_HELPER = ASSETS / 'mithril-domain-prefill.cljk'
 PROBE_SCRIPT = ASSETS / 'ontology_probe.py'
+SERVER_SCRIPT = ASSETS / 'mithril-server.cljk'
+MITHRIL_RESIDENT = os.environ.get('BENCH_MITHRIL_RESIDENT', '0') == '1'
 STATE_SCHEMA = Path(MITHRIL) / 'ontology/state-graph-v1.mith'
 RUN_ROOT = Path(os.environ.get('BENCH_RUN_ROOT', '/tmp/mithril-harness'))
 MAX_STEPS = int(os.environ.get('BENCH_MAX_STEPS', '500'))
@@ -42,6 +46,16 @@ REPEAT_ID = os.environ.get('BENCH_REPEAT_ID', 'development')
 CRITICAL_REVIEW = os.environ.get('BENCH_CRITICAL_REVIEW', '1') == '1'
 MAX_CONSECUTIVE_INSPECT = int(os.environ.get('BENCH_MAX_CONSECUTIVE_INSPECT', '6'))
 ACTIONS = ('inspect', 'modify', 'verify', 'finish')
+TRANSPORT = os.environ.get('BENCH_TRANSPORT', 'hermes')
+# Harness-written history entries: the model chose finish (or inspect) and the harness refused.
+REFUSED_FINISH = {'critical review gate', 'required artifact check', 'finish gate'}
+CHAT_OBSERVATION_CHARS = 8000
+CHAT_SINGLE_SYSTEM = 'Follow the output format the user asks for exactly. Do not add markdown.'
+CHAT_SYSTEM = ('You are a terminal task-solving agent. Return exactly one JSON object and no markdown: '
+               '{"action":"inspect|modify|verify|finish","command":"bash command","reason":"brief"}. '
+               'Commands execute in the isolated benchmark container. Multi-line bash commands and file edits are allowed. '
+               'Choose finish only after checking the required artifact or behavior. Do not repeat an unchanged failed command. '
+               'The JSON must parse strictly: no trailing commas or empty keys. For finish use command="true".')
 
 
 def strip_trailing_json_commas(source):
@@ -66,6 +80,54 @@ def strip_trailing_json_commas(source):
     return ''.join(output)
 
 
+class MithrilServer:
+    """One resident kbb process per agent (assets/mithril-server.cljk).
+    Requests are serialized; a dead or erroring server raises, never falls back."""
+
+    def __init__(self):
+        self.proc = None
+        self.lock = asyncio.Lock()
+        self.next_id = 0
+
+    async def start(self):
+        self.proc = await asyncio.create_subprocess_exec(
+            KBB, '--classpath', CLASSPATH, str(SERVER_SCRIPT), cwd=str(MITHRIL),
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            limit=16 * 1024 * 1024)
+        ready = await asyncio.wait_for(self.proc.stdout.readline(), 120)
+        if json.loads(ready or b'{}').get('ready') is not True:
+            err = (await self.proc.stderr.read())[-1200:].decode(errors='replace')
+            raise RuntimeError('Mithril server did not start: ' + err)
+
+    async def request(self, op, args, timeout=120):
+        async with self.lock:
+            if self.proc is None:
+                await self.start()
+            if self.proc.returncode is not None:
+                raise RuntimeError('Mithril server exited with ' + str(self.proc.returncode))
+            self.next_id += 1
+            self.proc.stdin.write((json.dumps({'id': self.next_id, 'op': op, 'args': [str(a) for a in args]}) + '\n').encode())
+            await self.proc.stdin.drain()
+            line = await asyncio.wait_for(self.proc.stdout.readline(), timeout)
+            if not line:
+                raise RuntimeError('Mithril server closed its output')
+            response = json.loads(line)
+            if response.get('id') != self.next_id:
+                raise RuntimeError(f'Mithril server answered request {response.get("id")}, expected {self.next_id}')
+            if not response.get('ok') or 'error' in response.get('result', {}):
+                raise RuntimeError(response.get('result'))
+            return response['result']
+
+    async def close(self):
+        if self.proc and self.proc.returncode is None:
+            self.proc.stdin.close()
+            try:
+                await asyncio.wait_for(self.proc.wait(), 5)
+            except asyncio.TimeoutError:
+                self.proc.kill()
+                await self.proc.wait()
+
+
 def last_json_object(raw, accept):
     decoder = json.JSONDecoder(); found = None
     for i, ch in enumerate(raw):
@@ -85,6 +147,8 @@ class HarnessLoop(BaseAgent):
     lane = 'baseline'
     lane_id = None
     semantic = False
+    transport = TRANSPORT
+    mithril_resident = MITHRIL_RESIDENT
 
     @staticmethod
     def name(): return 'hermes-gpt6-luna-terminal-loop'
@@ -96,6 +160,7 @@ class HarnessLoop(BaseAgent):
         self.calls = []; self.failed_usage_files = []; self.history = []
         self.semantic_receipts = 0; self.task_state_receipts = []; self.hypotheses = []
         self.mith_wall_seconds = 0.0; self.prompt_chars = []
+        self.model_wall_seconds = 0.0; self.exec_wall_seconds = 0.0
         self.critical_review_requested = False; self.critical_review_done = False
         self.probe_data = None; self.plan = None; self.domain_receipt = None
         self.latest_state_receipt = None; self.created_artifacts = set()
@@ -113,7 +178,18 @@ class HarnessLoop(BaseAgent):
 
     # ---- model and tool boundaries --------------------------------------
     async def hermes_call(self, prompt, usage, kind):
-        """Retry a failed provider turn without rerunning a terminal action."""
+        """One single-turn model call. Retries a failed provider turn without
+        rerunning a terminal action. With the chat transport it is one direct
+        OpenRouter call instead of a Hermes process."""
+        if self.transport == 'chat':
+            started = time.monotonic()
+            try:
+                text = await chat_complete([{'role': 'system', 'content': CHAT_SINGLE_SYSTEM},
+                                            {'role': 'user', 'content': prompt}], usage)
+            finally:
+                self.model_wall_seconds += time.monotonic() - started
+            self.calls.append({'usage_file': str(usage), 'exit_code': 0, 'kind': kind})
+            return text
         model = os.environ.get('BENCH_MODEL', 'openai/gpt-6-luna')
         failures = []
         for attempt in range(3):
@@ -142,6 +218,13 @@ class HarnessLoop(BaseAgent):
         raise RuntimeError(f'Hermes {kind} failed after {len(failures)} attempt(s): {json.dumps(failures)}')
 
     async def shell(self, environment, command):
+        started = time.monotonic()
+        try:
+            return await self._shell(environment, command)
+        finally:
+            self.exec_wall_seconds += time.monotonic() - started
+
+    async def _shell(self, environment, command):
         try:
             res = await environment.exec(command=command, timeout_sec=120)
             return {'exit_code': res.return_code, 'stdout': (res.stdout or '')[-12000:], 'stderr': (res.stderr or '')[-4000:]}
@@ -161,8 +244,20 @@ class HarnessLoop(BaseAgent):
         return data
 
     # ---- Mithril semantic layer -----------------------------------------
+    async def mithril_request(self, op, cli_args, server_args, label):
+        if not self.mithril_resident:
+            return await self.kbb_json(cli_args, label)
+        if getattr(self, 'mithril_server', None) is None:
+            self.mithril_server = MithrilServer()
+        started = time.monotonic()
+        try:
+            return await self.mithril_server.request(op, server_args)
+        finally:
+            self.mith_wall_seconds += time.monotonic() - started
+
     async def mith(self, op, action='', outcome='true'):
-        return await self.kbb_json([str(HELPER), str(PROFILE), str(self.state), op, action, outcome], '')
+        return await self.mithril_request('bpmn', [str(HELPER), str(PROFILE), str(self.state), op, action, outcome],
+                                          [PROFILE, self.state, op, action, outcome], '')
 
     async def encode_task_state(self, instruction, phase):
         observed_text = json.dumps(self.history[-1].get('result', {}), ensure_ascii=False) if self.history else ''
@@ -181,8 +276,9 @@ class HarnessLoop(BaseAgent):
         state_path = self.state.with_suffix('.task.json')
         document_path = self.state.with_suffix('.task.jsonld')
         state_path.write_text(json.dumps(state, ensure_ascii=False))
-        receipt = await self.kbb_json([str(TASK_HELPER), str(state_path), str(document_path),
-                                       str(self.domain_ontology), str(STATE_SCHEMA)], 'Mithril task state: ')
+        receipt = await self.mithril_request(
+            'task-state', [str(TASK_HELPER), str(state_path), str(document_path), str(self.domain_ontology), str(STATE_SCHEMA)],
+            [state_path, document_path, self.domain_ontology, STATE_SCHEMA], 'Mithril task state: ')
         self.task_state_receipts.append(receipt)
         self.latest_state_receipt = receipt
         return receipt
@@ -288,8 +384,81 @@ class HarnessLoop(BaseAgent):
                      'Return action="verify"; revise the files if it fails. Do not finish in this turn.')
         return text
 
+    def chat_render(self, h):
+        if h['action'] == 'controller':
+            return [{'role': 'assistant', 'content': json.dumps({'action': 'inspect'})},
+                    {'role': 'user', 'content': 'HARNESS: ' + json.dumps(h['result'], ensure_ascii=False)}]
+        if h['command'] in REFUSED_FINISH:
+            return [{'role': 'assistant', 'content': json.dumps({'action': 'finish', 'command': 'true'})},
+                    {'role': 'user', 'content': 'HARNESS: ' + json.dumps(h['result'], ensure_ascii=False)}]
+        result = h['result']
+        observation = {'exit_code': result.get('exit_code'),
+                       'stdout': (result.get('stdout') or '')[-CHAT_OBSERVATION_CHARS:],
+                       'stderr': (result.get('stderr') or '')[-2000:]}
+        return [{'role': 'assistant', 'content': json.dumps({'action': h['action'], 'command': h['command']},
+                                                            ensure_ascii=False)},
+                {'role': 'user', 'content': 'OBSERVATION: ' + json.dumps(observation, ensure_ascii=False)}]
+
+    def chat_semantic_static(self):
+        """The parts of the semantic prompt that are fixed after prefill, sent once."""
+        return ('PREFILLED TASK ONTOLOGY: ' + json.dumps(self.plan, ensure_ascii=False)
+                + '\nOWL-ENTAILED SOURCE CLASS FAMILIES: '
+                + json.dumps(self.domain_receipt.get('entailed-descendants', {}), ensure_ascii=False)
+                + '\nUse a Co-Scientist cycle: propose a concrete hypothesis, run the cheapest command that can refute it, '
+                'record what the output changed, then revise. Return fields hypothesis and prediction alongside action. '
+                'After two inspections, favor producing and checking the required files. '
+                'A finish action is refused while required files are missing. '
+                'Use only source vocabulary when adding RDF triples. Resolve one uncertain ontology relation or '
+                'data-normalization hypothesis per experiment; test the standalone query files on the generated graph before finish.')
+
+    def chat_semantic_volatile(self, instruction):
+        missing = [p for p in self.required_artifacts(instruction) if p not in self.created_artifacts]
+        text = (f'RESEARCH PHASE: {self.phase()}. Required artifacts still unconfirmed: {missing}. '
+                f'ACTIVE HYPOTHESES: {json.dumps(self.hypotheses[-3:], ensure_ascii=False)}'
+                '\nLATEST DOMAIN EVIDENCE: '
+                + json.dumps((self.latest_state_receipt or {}).get('domain-entailed', {}), ensure_ascii=False))
+        streak = self.inspect_streak()
+        if streak >= MAX_CONSECUTIVE_INSPECT:
+            text += ('\nEXPERIMENT BUDGET: The last ' + str(streak) + ' actions only inspected data. '
+                     'Create the required artifacts now. Inspect is unavailable until after a modify or verify action.')
+        if getattr(self, 'jev_guidance', None):
+            text += '\nTYPED JEV PRIORITY (a hypothesis to test, not an accepted fact): ' + self.jev_guidance
+        if getattr(self, 'knowledge_guidance', None):
+            text += '\nPRECOMPILED MITH KNOWLEDGE (source verification required): ' + self.knowledge_guidance
+        if CRITICAL_REVIEW and self.critical_review_requested and not self.critical_review_done:
+            text += ('\nCRITICAL REVIEW REQUIRED: Challenge the solution as a skeptical reviewer. Run a concrete '
+                     'verification command that checks generated triples use only source vocabulary, the query files '
+                     'execute directly over the generated graph, and the stated edge cases. Return action="verify"; '
+                     'revise the files if it fails. Do not finish in this turn.')
+        return text
+
+    def chat_messages(self, instruction, enabled):
+        """Fully append-only (measured: the provider reuses its cache only when
+        the previous request's whole prompt is a prefix of the next). Each call
+        appends the actions/observations since the last call, then one short
+        volatile message, and keeps all of it for the next call."""
+        if not getattr(self, 'chat_log', None):
+            self.chat_log = [{'role': 'system', 'content': CHAT_SYSTEM},
+                             {'role': 'user', 'content': 'TASK:\n' + self.task_text(instruction)}]
+            if self.semantic:
+                self.chat_log.append({'role': 'user', 'content': self.chat_semantic_static()})
+            self.chat_rendered = 0
+        for h in self.history[self.chat_rendered:]:
+            self.chat_log += self.chat_render(h)
+        self.chat_rendered = len(self.history)
+        volatile = f'ALLOWED ACTIONS: {enabled}'
+        if self.semantic:
+            volatile += '\n' + self.chat_semantic_volatile(instruction)
+        self.chat_log.append({'role': 'user', 'content': volatile + '\nExecute the next action.'})
+        return list(self.chat_log)
+
     async def query(self, instruction, enabled):
         n = len(self.calls)
+        if self.transport == 'chat':
+            messages = self.chat_messages(instruction, enabled)
+            self.prompt_chars.append(sum(len(m['content']) for m in messages))
+            raw = (await self.chat_call(messages, self.usage_dir / f'call-{n:03}.json', 'action')).strip()
+            return await self.parse_action(raw, n)
         transcript = json.dumps(self.history, ensure_ascii=False)
         prompt = ("You are a terminal task-solving agent. Return exactly one JSON object and no markdown: "
                   '{"action":"inspect|modify|verify|finish","command":"bash command","reason":"brief"}. '
@@ -304,6 +473,18 @@ class HarnessLoop(BaseAgent):
             prompt += self.semantic_prompt(instruction)
         self.prompt_chars.append(len(prompt))
         raw = (await self.hermes_call(prompt, self.usage_dir / f'call-{n:03}.json', 'action')).strip()
+        return await self.parse_action(raw, n)
+
+    async def chat_call(self, messages, usage, kind):
+        started = time.monotonic()
+        try:
+            text = await chat_complete(messages, usage)
+        finally:
+            self.model_wall_seconds += time.monotonic() - started
+        self.calls.append({'usage_file': str(usage), 'exit_code': 0, 'kind': kind})
+        return text
+
+    async def parse_action(self, raw, n):
         valid = lambda c: c.get('action') in ACTIONS
         action = last_json_object(raw, valid)
         if action is None:
@@ -396,6 +577,8 @@ class HarnessLoop(BaseAgent):
                 if self.semantic: await self.mith('complete', action_id, str(result['exit_code'] == 0).lower())
             self.record_usage(context, started, required)
         finally:
+            if getattr(self, 'mithril_server', None) is not None:
+                await self.mithril_server.close()
             (RUN_ROOT / 'receipts').mkdir(parents=True, exist_ok=True)
             (RUN_ROOT / 'receipts' / f'{self.run_id}.json').write_text(json.dumps({
                 'instruction_sha256': hashlib.sha256(instruction.encode()).hexdigest(),
@@ -441,5 +624,8 @@ class HarnessLoop(BaseAgent):
             'mithril_wall_seconds': round(self.mith_wall_seconds, 3),
             'prompt_chars_total': sum(self.prompt_chars), 'required_artifacts': required,
             'artifact_count_confirmed': len(self.created_artifacts),
-            'harness_version': self.version(), 'harness_lane': self.lane_id}
+            'harness_version': self.version(), 'harness_lane': self.lane_id, 'transport': self.transport,
+            'mithril_resident': self.mithril_resident,
+            'cache_read_tokens': sm('cache_read_tokens'), 'uncached_input_tokens': sm('input_tokens') + sm('cache_write_tokens'),
+            'provider_api_calls': sm('api_calls')}
         context.metadata.update(self.extra_metadata())

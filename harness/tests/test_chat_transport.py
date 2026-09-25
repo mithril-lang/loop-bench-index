@@ -1,0 +1,107 @@
+"""Chat transport builds append-only message arrays (the property that makes
+the provider prompt cache hit). Scripted model, local bash.
+Run: PYTHONPATH=harness/tests <harbor-venv>/bin/python -m unittest harness/tests/test_chat_transport.py"""
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import scripted  # noqa: F401
+from scripted import Scripted, run_agent
+
+from mithril_harness import lanes, loop
+
+
+def chat_lane(cls):
+    return type('Chat' + cls.__name__, (Scripted, cls), {'transport': 'chat'})
+
+
+class AppendOnly(unittest.TestCase):
+    def check(self, cls):
+        agent, context = run_agent(chat_lane(cls), Path(tempfile.mkdtemp(prefix='chat-')))
+        logs = agent.chat_messages_log
+        self.assertGreater(len(logs), 10, 'scenario did not exercise the loop')
+        for before, after in zip(logs, logs[1:]):
+            self.assertEqual(after[:len(before)], before, 'the previous prompt is not a prefix of the next')
+            self.assertGreater(len(after), len(before), 'history did not grow')
+        self.assertEqual(logs[0][0], {'role': 'system', 'content': loop.CHAT_SYSTEM})
+        self.assertNotIn({'role': 'system', 'content': loop.CHAT_SYSTEM}, logs[0][1:])
+        roles = [m['role'] for m in logs[-1]]
+        self.assertEqual(roles[:2], ['system', 'user'])
+        self.assertEqual(agent.history[-1]['action'], 'finish')
+        self.assertEqual(context.metadata['transport'], 'chat')
+        return agent, logs
+
+    def test_mithril_lane(self):
+        agent, logs = self.check(lanes.MithrilLane)
+        text = json.dumps(logs[-1])
+        for literal in ('Finish held for independent acceptance review', 'Inspect budget exhausted'):
+            self.assertIn(literal, text)
+        self.assertIn('RESEARCH PHASE', logs[-1][-1]['content'])
+        self.assertEqual(json.dumps(logs[-1]).count('PREFILLED TASK ONTOLOGY'), 1)  # static part sent once
+        self.assertNotIn('PREFILLED TASK ONTOLOGY', logs[-1][-1]['content'])
+
+    def test_react_lane(self):
+        agent, _ = run_agent(chat_lane(lanes.ReactLane), Path(tempfile.mkdtemp(prefix='chat-')))
+        logs = agent.chat_messages_log
+        for before, after in zip(logs, logs[1:]):
+            self.assertEqual(after[:len(before)], before)
+
+    def test_hermes_default_unchanged(self):
+        self.assertEqual(lanes.MithrilLane.transport, loop.TRANSPORT)
+
+
+if __name__ == '__main__':
+    unittest.main()
+
+
+class SingleTurn(unittest.TestCase):
+    def test_prefill_uses_the_format_system_prompt_not_the_action_one(self):
+        import asyncio
+        seen = []
+        async def fake(messages, usage, **kw):
+            seen.append(messages)
+            return '{"goals": []}'
+        original = loop.chat_complete
+        loop.chat_complete = fake
+        try:
+            agent = type('C', (lanes.MithrilLane,), {'transport': 'chat'})(logs_dir=Path(tempfile.mkdtemp()))
+            asyncio.run(agent.hermes_call('Return a plan.', agent.usage_dir / 'call-000.json', 'prefill'))
+        finally:
+            loop.chat_complete = original
+        self.assertEqual(seen[0][0], {'role': 'system', 'content': loop.CHAT_SINGLE_SYSTEM})
+        self.assertNotIn('"action"', seen[0][0]['content'])
+
+
+class FailedAttempts(unittest.TestCase):
+    def test_timeouts_are_recorded_with_unknown_cost_then_success(self):
+        import asyncio
+        import os
+        from mithril_harness import chat
+        calls = {'n': 0}
+        def fake_post(body, key, timeout):
+            calls['n'] += 1
+            if calls['n'] < 3:
+                raise TimeoutError('read timed out')
+            return {'model': 'm', 'provider': 'p', 'choices': [{'message': {'content': '{"action":"inspect"}'}}],
+                    'usage': {'prompt_tokens': 100, 'completion_tokens': 5, 'cost': 0.001,
+                              'prompt_tokens_details': {'cached_tokens': 90}}}
+        original_post, original_sleep = chat._post, asyncio.sleep
+        chat._post = fake_post
+        async def no_sleep(_): return None
+        chat.asyncio.sleep = no_sleep
+        os.environ['OPENROUTER_API_KEY'] = 'test'
+        d = Path(tempfile.mkdtemp())
+        try:
+            text = asyncio.run(chat.chat_complete([{'role': 'user', 'content': 'x'}], d / 'call-001.json'))
+        finally:
+            chat._post = original_post
+            chat.asyncio.sleep = original_sleep
+        self.assertEqual(text, '{"action":"inspect"}')
+        failed = sorted(d.glob('call-001-failed-*.json'))
+        self.assertEqual(len(failed), 2)
+        record = json.loads(failed[0].read_text())
+        self.assertEqual((record['status'], record['partial'], record['estimated_cost_usd']), ('TimeoutError', True, None))
+        ok = json.loads((d / 'call-001.json').read_text())
+        self.assertEqual((ok['input_tokens'], ok['cache_read_tokens'], ok['estimated_cost_usd']), (10, 90, 0.001))
