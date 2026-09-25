@@ -19,6 +19,10 @@ rules are hypotheses and constraints; only source RDF and query execution
 establish task facts. Precreating the railway task ontology makes later runs
 task-specific, so they must be labeled separately from an unseen-task bench.
 
+The paired preloaded-knowledge diagnostic and its public-safe measurements are
+in `../../results/knowledge-ablation-2026-09-25/report.md`. Its 8 decision
+questions are a narrow ablation, not a scored full Terminal-Bench agent run.
+
 `source_expected.py` reads only the three required ontology files and source
 submission Turtle files in the chosen target. It independently calculates physical point grouping,
 latest coordinates, section adjacency, voltage, vehicle authorization, and the
