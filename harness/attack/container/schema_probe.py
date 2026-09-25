@@ -122,6 +122,11 @@ def check_reach(env, outdir):
     ns = 'http://example.org/reach#'
     name, alias = URIRef(ns + 'name'), URIRef(ns + 'alias')
     inv = [s for s, g in sources.items() if s.startswith('inventory')]
+    # with several inventory snapshots, the latest rc:takenOn is authoritative (the ontology says so)
+    def taken(src):
+        dates = [str(d) for d in sources[src].objects(None, URIRef(ns + 'takenOn'))]
+        return max(dates) if dates else ''
+    inv.sort(key=taken, reverse=True)
     authority = {}
     if inv:
         g = sources[inv[0]]
@@ -131,7 +136,8 @@ def check_reach(env, outdir):
                 authority[n] = n
                 for a in g.objects(node, alias):
                     authority[str(a)] = n
-    entries = {str(union.value(h, name)) for h in union.subjects(RDF.type, URIRef(ns + 'ExposedHost'))}
+    auth_graph = sources[inv[0]] if inv else union
+    entries = {str(auth_graph.value(h, name)) for h in auth_graph.subjects(RDF.type, URIRef(ns + 'ExposedHost'))}
     runs = set()
     for h, _ in union.subject_objects(URIRef(ns + 'runsAs')):
         n = union.value(h, name)

@@ -20,8 +20,10 @@ UV = ['uv', 'run', '--quiet', '--no-project', '--with', 'rdflib==7.1.4', 'python
 BREAKS = {'no-deny': ("    if (key(a), key(b)) not in denied:\n", "    if True:\n", {1, 2, 3}),
           'no-expiry': ("    if str(next(g.objects(d, RC.validUntil))) >= CURRENT:\n", "    if True:\n", {1, 2, 3}),
           'no-normalize': ("    return str(name).lower().split('.')[0]\n", "    return str(name)\n", {2}),
-          'off-by-one': ("dd <= LIMIT", "dd < LIMIT", {0, 1, 2, 3}),
-          'no-alias': ("    return alias_map.get(name, norm(name))\n", "    return norm(name)\n", {3})}
+          'off-by-one': ("dd <= LIMIT", "dd < LIMIT", {0, 1, 2, 3, 4}),
+          'no-alias': ("    return alias_map.get(name, norm(name))\n", "    return norm(name)\n", {3, 4}),
+          'ignore-snapshots': ("latest = snapshots[-1][1] if snapshots else None", "latest = None", {4}),
+          'oldest-snapshot': ("latest = snapshots[-1][1] if snapshots else None", "latest = snapshots[0][1] if snapshots else None", {4})}
 
 
 def solution(task, breaks=None):
@@ -58,7 +60,7 @@ class Generator(unittest.TestCase):
         self.assertTrue(rows['env-t']['exposure_paths.tsv'] and rows['env-h']['exposure_paths.tsv'])
 
     def test_controls_every_noise_level(self):
-        for noise in (0, 1, 2, 3):
+        for noise in (0, 1, 2, 3, 4):
             task = Path(tempfile.mkdtemp()); reachmini.generate(21, task, 6, 30, noise)
             good = verify(task, solution(task))
             self.assertEqual((good['passed'], good['total']), (7, 7), noise)
