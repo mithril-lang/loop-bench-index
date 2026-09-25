@@ -17,8 +17,20 @@ def norm(name):
     return str(name).lower().split('.')[0]
 
 
+# names and aliases declared in the inventory map to the inventory name (noise 3)
+alias_map = {}
+for h in g.subjects(RC.alias, None):
+    name = str(next(g.objects(h, RC.name)))
+    alias_map[name] = name
+    for a in g.objects(h, RC.alias):
+        alias_map[str(a)] = name
+for env_node in g.subjects(RC.assessmentDate, None):
+    CURRENT = str(next(g.objects(env_node, RC.assessmentDate)))
+
+
 def key(node):
-    return norm(next(g.objects(node, RC.name)))
+    name = str(next(g.objects(node, RC.name)))
+    return alias_map.get(name, norm(name))
 
 
 def of_class(cls):

@@ -11,7 +11,11 @@ the regime where interpretation does:
 - size: number of hosts (with distractor edges);
 - noise 0/1/2: 1 adds policy rules (an explicit deny overrides an allow;
   expired delegations do not count), 2 also spells host and role names
-  differently across sources (identity must be normalized).
+  differently across sources (identity must be normalized);
+- noise 3: the same traps, but no rule is stated in the instruction. The deny
+  and validity semantics are only `rdfs:comment`s in the environment's
+  ontology, the assessment date is a data value, and name variants are linked
+  to inventory names only through `rc:alias` values in the data.
 
 Expected rows come from the generator's own model, never from parsing its
 RDF. A hidden environment (different seed stream) is never shown to the agent.
@@ -22,6 +26,7 @@ RDF. A hidden environment (different seed stream) is never shown to the agent.
 import argparse
 import json
 import random
+import zlib
 from collections import deque
 from pathlib import Path
 
@@ -46,6 +51,13 @@ rc:fromRole a owl:ObjectProperty ; rdfs:domain rc:Delegation ; rdfs:range rc:Rol
 rc:toRole a owl:ObjectProperty ; rdfs:domain rc:Delegation ; rdfs:range rc:Role .
 rc:validUntil a owl:DatatypeProperty ; rdfs:domain rc:Delegation ; rdfs:range xsd:date .
 """
+ONTOLOGY_IMPLICIT = ONTOLOGY + """rc:Environment a owl:Class .
+rc:assessmentDate a owl:DatatypeProperty ; rdfs:domain rc:Environment ; rdfs:range xsd:date .
+rc:alias a owl:DatatypeProperty ; rdfs:domain rc:Host ;
+    rdfs:comment "Other sources may identify this host by any of its alias values instead of its name." .
+rc:deniedRead rdfs:comment "An explicit deny: the role cannot read the data store, whatever rc:canRead says." .
+rc:validUntil rdfs:comment "A delegation is in effect only while this date is on or after the environment's rc:assessmentDate." .
+"""
 COLUMNS = {'exposure_paths.tsv': ['entryHost', 'dataStore', 'minHops'],
            'blast_radius.tsv': ['entryHost', 'reachableHosts', 'reachableRoles', 'reachableDataStores']}
 
@@ -62,6 +74,8 @@ Reachability rules. A host typed `rc:ExposedHost` (a subclass of `rc:Host`) is a
 RULES_NOISE1 = (" A role never reads a data store it has an `rc:deniedRead` for, even if it also has `rc:canRead` "
                 "(an explicit deny overrides an allow). A delegation counts only if its `rc:validUntil` is on or "
                 "after `" + CURRENT_DATE + "`.")
+IMPLICIT_NOTE = (" Other conditions on these moves are defined by the environment itself: read the ontology file and the "
+                 "data. Report each host by its `rc:name` in the inventory source.")
 RULES_NOISE2 = (" Sources may spell the same name differently: two resources are the same host or role when their "
                 "`rc:name` values are equal after lowercasing and removing any domain suffix after the first `.` "
                 "(`WEB-01.corp.example` and `web-01` are the same host). Report names in that normalized form.")
@@ -70,6 +84,8 @@ RULES_NOISE2 = (" Sources may spell the same name differently: two resources are
 def variant(rng, name, noise):
     if noise < 2:
         return name
+    if noise >= 3:  # an opaque alias: only the inventory's rc:alias links it back
+        return rng.choice([name, f'{name.upper()}.corp.example', f'asset-{zlib.crc32(name.encode()) % 9973:04d}', f'{name}.internal'])
     return rng.choice([name, name.upper(), f'{name}.corp.example', f'{name.upper()}.internal'])
 
 
@@ -156,14 +172,19 @@ def expected(env, k):
 
 def write_env(rng, env, d, noise):
     d.mkdir(parents=True, exist_ok=True)
-    (d / 'ontology.owl').write_text(ONTOLOGY)
+    (d / 'ontology.owl').write_text(ONTOLOGY_IMPLICIT if noise >= 3 else ONTOLOGY)
+    aliases = {}
+    alias_of = lambda h: aliases.setdefault(h, {}).setdefault(len(aliases.get(h, {})), variant(rng, h, noise)) if noise >= 3 else variant(rng, h, noise)
     prefix = f'@prefix rc: <{NS}> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n'
     iri = lambda kind, name, src: f'<http://env.example.org/{src}/{kind}/{name}>'
     # inventory: hosts and stores; network: connections; iam: roles, runsAs, reads, delegations
     inv = [prefix]
+    host_lines = {}
     for h in env['hosts']:
         kind = 'rc:ExposedHost' if h in env['exposed'] else 'rc:Host'
-        inv.append(f'{iri("host", h, "inv")} a {kind} ; rc:name "{h}" .')
+        host_lines[h] = f'{iri("host", h, "inv")} a {kind} ; rc:name "{h}"'
+    if noise >= 3:
+        inv.append(f'<http://env.example.org/inv/environment> a rc:Environment ; rc:assessmentDate "{CURRENT_DATE}"^^xsd:date .')
     for s in env['stores']:
         kind = 'rc:SensitiveDataStore' if s in env['sensitive'] else 'rc:DataStore'
         inv.append(f'{iri("store", s, "inv")} a {kind} ; rc:name "{s}" .')
@@ -172,16 +193,16 @@ def write_env(rng, env, d, noise):
     net_src = 'net' if noise >= 2 else 'inv'
     if noise >= 2:
         for h in env['hosts']:
-            net.append(f'{iri("host", h, "net")} a rc:Host ; rc:name "{variant(rng, h, noise)}" .')
+            net.append(f'{iri("host", h, "net")} a rc:Host ; rc:name "{alias_of(h)}" .')
     for a, b in sorted(env['connects']):
         net.append(f'{iri("host", a, net_src)} rc:connectsTo {iri("host", b, net_src)} .')
     iam = [prefix]
     iam_src = 'iam' if noise >= 2 else 'inv'
     for r in env['roles']:
-        iam.append(f'{iri("role", r, "iam")} a rc:Role ; rc:name "{variant(rng, r, noise)}" .')
+        iam.append(f'{iri("role", r, "iam")} a rc:Role ; rc:name "{r if noise >= 3 else variant(rng, r, noise)}" .')
     if noise >= 2:
         for h in sorted(env['runs_as']):
-            iam.append(f'{iri("host", h, "iam")} a rc:Host ; rc:name "{variant(rng, h, noise)}" .')
+            iam.append(f'{iri("host", h, "iam")} a rc:Host ; rc:name "{alias_of(h)}" .')
     for h, r in sorted(env['runs_as'].items()):
         iam.append(f'{iri("host", h, iam_src)} rc:runsAs {iri("role", r, "iam")} .')
     for r, s in sorted(env['reads']):
@@ -191,6 +212,9 @@ def write_env(rng, env, d, noise):
     for n, (a, b, until) in enumerate(env['delegations']):
         iam.append(f'<http://env.example.org/iam/delegation/{n}> a rc:Delegation ; rc:fromRole {iri("role", a, "iam")} ; '
                    f'rc:toRole {iri("role", b, "iam")} ; rc:validUntil "{until}"^^xsd:date .')
+    for h in env['hosts']:
+        extra = ''.join(f' ; rc:alias "{a}"' for a in sorted(set(aliases.get(h, {}).values())) if a != h)
+        inv.append(host_lines[h] + extra + ' .')
     (d / f'inventory_{rng.randint(100, 999)}.ttl').write_text('\n'.join(inv) + '\n')
     (d / f'network_{rng.randint(100, 999)}.ttl').write_text('\n'.join(net) + '\n')
     (d / f'iam_{rng.randint(100, 999)}.ttl').write_text('\n'.join(iam) + '\n')
@@ -205,7 +229,7 @@ def generate(seed, out, depth=6, size=30, noise=1):
         env = build(rng, n, depth, noise)
         write_env(rng, env, out / rel, noise)
         spec['rows'][rel.split('/')[-1]] = expected(env, k)
-    rules = (RULES_NOISE1 if noise >= 1 else '') + (RULES_NOISE2 if noise >= 2 else '')
+    rules = IMPLICIT_NOTE if noise >= 3 else (RULES_NOISE1 if noise >= 1 else '') + (RULES_NOISE2 if noise >= 2 else '')
     (out / 'instruction.md').write_text(INSTRUCTION.format(target='env-t', example='env-e', rules=rules, k=k))
     (out / 'expected.json').write_text(json.dumps(spec, indent=1))
     return out
@@ -217,6 +241,6 @@ if __name__ == '__main__':
     parser.add_argument('--out', required=True)
     parser.add_argument('--depth', type=int, default=6)
     parser.add_argument('--size', type=int, default=30)
-    parser.add_argument('--noise', type=int, default=1, choices=(0, 1, 2))
+    parser.add_argument('--noise', type=int, default=1, choices=(0, 1, 2, 3))
     args = parser.parse_args()
     print(generate(args.seed, args.out, args.depth, args.size, args.noise))

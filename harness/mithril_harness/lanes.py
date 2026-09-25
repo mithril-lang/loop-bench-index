@@ -71,7 +71,7 @@ class GraphLane(GraphToolkit, ReactLane):
 
 class DomainKnowledgeLane(KnowledgePack, ReactLane):
     lane_id = 'domain'
-    knowledge_packs = ('reach-domain-v1.mith',)
+    knowledge_packs = ('reach-domain-v2.mith',)
     @staticmethod
     def name(): return 'react-domain-knowledge-gpt6-luna-loop'
 
@@ -85,7 +85,7 @@ class FailureKnowledgeLane(KnowledgePack, ReactLane):
 
 class CombinedLane(KnowledgePack, GraphToolkit, ReactLane):
     lane_id = 'combined'
-    knowledge_packs = ('reach-domain-v1.mith', 'failure-cases-v1.mith')
+    knowledge_packs = ('reach-domain-v2.mith', 'failure-cases-v1.mith')
     @staticmethod
     def name(): return 'react-knowledge-graph-gpt6-luna-loop'
 
@@ -109,7 +109,7 @@ LANES = {
     'judge':          {'import': 'mithril_harness.lanes:JudgeLane', 'adds': ['semantic-layer', 'differential-judge'],
                        'reproduces': None},
     'graph': {'import': 'mithril_harness.lanes:GraphLane', 'adds': ['graph-toolkit'], 'reproduces': None},
-    'domain': {'import': 'mithril_harness.lanes:DomainKnowledgeLane', 'adds': ['knowledge:reach-domain'], 'reproduces': None},
+    'domain': {'import': 'mithril_harness.lanes:DomainKnowledgeLane', 'adds': ['knowledge:reach-domain-v2'], 'reproduces': None},
     'failures': {'import': 'mithril_harness.lanes:FailureKnowledgeLane', 'adds': ['knowledge:failure-cases'], 'reproduces': None},
     'combined': {'import': 'mithril_harness.lanes:CombinedLane',
                  'adds': ['knowledge:reach-domain', 'knowledge:failure-cases', 'graph-toolkit'], 'reproduces': None},
