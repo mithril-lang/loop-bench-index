@@ -5,6 +5,8 @@ named by the role it plays in the derived model (see harness/README.md):
 - JevPriority         System-1 policy over a fixed option set (v7 behaviour)
 - DifferentialJudge   measured judge: harness-run row differential gates finish (v9a)
 - AutoAcceptance      typed acceptance check run by the harness after every modify
+- KnowledgePack       compiled .mith knowledge packs (domain rules, failure cases) in the static task text
+- GraphToolkit        a task-agnostic graph helper placed in the container
 """
 
 import asyncio
@@ -15,6 +17,7 @@ import re
 import shlex
 import time
 import urllib.request
+from pathlib import Path
 
 from .differential import (command_paths, compare, coverage_gaps,
                            independence_violations, validate_submission)
@@ -362,3 +365,56 @@ class AutoAcceptance:
                      'acceptance_pass': exits.count(0),
                      'acceptance_seconds': round(sum(r['seconds'] for r in self.acceptance_runs), 3)})
         return data
+
+
+KNOWLEDGE_PACK_HELPER = ASSETS / 'knowledge_pack.cljk'
+
+
+class KnowledgePack:
+    """Compiles `knowledge_packs` (files under assets/knowledge) with Mithril once
+    per trial and puts every entry into the static task text. With the chat
+    transport that text sits in the cached prefix, so more knowledge costs
+    little per step. Entries are general to a task family: rules, checks and
+    failure cases, never answers."""
+    knowledge_packs = ()
+
+    async def run(self, instruction, environment, context):
+        receipt = await self.kbb_json([str(KNOWLEDGE_PACK_HELPER)] + [str(ASSETS / 'knowledge' / p) for p in self.knowledge_packs],
+                                      'Knowledge pack compile failed: ')
+        if not receipt.get('entries'):
+            raise RuntimeError('REFUSE: knowledge packs compiled to no entries')
+        self.knowledge_pack_receipt = {'packs': receipt['packs'], 'axioms': receipt['axioms'],
+                                       'closure': receipt['closure'], 'entries': len(receipt['entries'])}
+        lines = []
+        for entry in receipt['entries']:
+            kind = entry['kind'].rsplit('/', 1)[-1]
+            lines.append(f'- [{kind}] {entry["text"]}')
+        self.knowledge_pack_text = '\n'.join(lines)
+        return await super().run(instruction, environment, context)
+
+    def task_text(self, instruction):
+        text = super().task_text(instruction)
+        if getattr(self, 'knowledge_pack_text', None):
+            text += ('\n\nKNOWLEDGE (compiled from Mithril ontology packs: domain rules, checks and failure cases '
+                     'seen in earlier runs; apply them where the task text agrees):\n' + self.knowledge_pack_text)
+        return text
+
+    def extra_metadata(self):
+        data = dict(super().extra_metadata())
+        data['knowledge_pack'] = getattr(self, 'knowledge_pack_receipt', None)
+        return data
+
+
+GRAPHKIT = Path(__file__).resolve().parents[1] / 'attack' / 'container' / 'graphkit.py'
+GRAPHKIT_TEXT = ('\n\nGRAPH TOOLKIT: `/opt/harness/graphkit.py` is available (use it from solve.py with '
+                 '`import sys; sys.path.insert(0, "/opt/harness"); import graphkit as gk`). It offers load_turtle(paths), '
+                 'files(dir, pattern), instances(g, class_iri) including subclasses, pairs(g, property_iri), '
+                 'literal(g, node, property_iri), bfs(adjacency, start) returning hop counts, and within(dist, k). '
+                 'It applies no task rules: name normalization, policies and edge choice are yours.')
+
+
+class GraphToolkit:
+    container_files = {'/opt/harness/graphkit.py': GRAPHKIT}
+
+    def task_text(self, instruction):
+        return super().task_text(instruction) + GRAPHKIT_TEXT

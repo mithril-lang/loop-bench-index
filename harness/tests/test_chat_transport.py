@@ -144,3 +144,26 @@ class MultiAction(unittest.TestCase):
         self.assertEqual(agent.multi_action_replies, 1)
         hermes = type('H', (lanes.ReactLane,), {'transport': 'hermes'})(logs_dir=Path(tempfile.mkdtemp()))
         self.assertEqual(asyncio.run(hermes.parse_action(raw, 1))['action'], 'finish')  # frozen v6 behaviour
+
+
+class KnowledgeAndToolkit(unittest.TestCase):
+    def test_knowledge_pack_goes_into_the_static_task_message(self):
+        import asyncio
+        receipt = {'packs': [{'path': 'x', 'digest': 'd', 'entries': 2}], 'axioms': 3, 'closure': 4,
+                   'entries': [{'id': 'r1', 'kind': 'https://x/AlgorithmRule', 'text': 'Use BFS for minimum hops.'},
+                               {'id': 'f1', 'kind': 'https://x/ObservedFailure', 'text': 'One action per reply.'}]}
+        class Stub(Scripted, lanes.CombinedLane):
+            transport = 'chat'
+            async def kbb_json(self, args, label):
+                self.pack_args = args
+                return receipt
+        agent, context = run_agent(Stub, Path(tempfile.mkdtemp(prefix='kp-')),
+                                   replies=['{"action":"inspect","command":"true"}', '{"action":"finish","command":"true"}'])
+        task_message = agent.chat_messages_log[0][1]['content']
+        self.assertIn('[AlgorithmRule] Use BFS for minimum hops.', task_message)
+        self.assertIn('[ObservedFailure] One action per reply.', task_message)
+        self.assertIn('GRAPH TOOLKIT', task_message)
+        self.assertEqual(agent.chat_messages_log[1][:2], agent.chat_messages_log[0][:2])  # static, cached prefix
+        self.assertTrue(any(str(a).endswith('failure-cases-v1.mith') for a in agent.pack_args))
+        self.assertEqual(context.metadata['knowledge_pack']['entries'], 2)
+        self.assertIn('/opt/harness/graphkit.py', lanes.CombinedLane.container_files)

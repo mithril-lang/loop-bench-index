@@ -1,0 +1,136 @@
+{
+  "matches": 120,
+  "ranking": [
+    [
+      "graph",
+      1544.5
+    ],
+    [
+      "react",
+      1526.4
+    ],
+    [
+      "failures",
+      1490.6
+    ],
+    [
+      "combined",
+      1483.1
+    ],
+    [
+      "domain",
+      1455.4
+    ]
+  ],
+  "wins": {
+    "combined": {
+      "domain": 5.0,
+      "failures": 6.0,
+      "graph": 5.0,
+      "react": 6.0
+    },
+    "domain": {
+      "combined": 7.0,
+      "failures": 4.0,
+      "graph": 4.0,
+      "react": 4.0
+    },
+    "failures": {
+      "combined": 6.0,
+      "domain": 8.0,
+      "graph": 4.0,
+      "react": 5.0
+    },
+    "graph": {
+      "combined": 7.0,
+      "domain": 8.0,
+      "failures": 8.0,
+      "react": 6.0
+    },
+    "react": {
+      "combined": 6.0,
+      "domain": 8.0,
+      "failures": 7.0,
+      "graph": 6.0
+    }
+  },
+  "lanes": {
+    "combined": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 7,
+      "mean_score": 0.7619,
+      "cost_usd": 0.078467
+    },
+    "domain": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 9,
+      "mean_score": 0.881,
+      "cost_usd": 0.078577
+    },
+    "failures": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 10,
+      "mean_score": 0.9286,
+      "cost_usd": 0.079851
+    },
+    "graph": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 11,
+      "mean_score": 0.9524,
+      "cost_usd": 0.078939
+    },
+    "react": {
+      "trials": 12,
+      "measured": 12,
+      "successes": 11,
+      "mean_score": 0.9524,
+      "cost_usd": 0.080074
+    }
+  },
+  "meta_review_candidates": [
+    {
+      "failed_check": "blast_radius.tsv",
+      "lanes": {
+        "combined": 10,
+        "domain": 6,
+        "graph": 2,
+        "failures": 3,
+        "react": 2
+      },
+      "seeds": [
+        512,
+        513,
+        514,
+        522,
+        525,
+        526,
+        527
+      ],
+      "status": "candidate (not admitted; needs held-out evidence)"
+    },
+    {
+      "failed_check": "exposure_paths.tsv",
+      "lanes": {
+        "combined": 10,
+        "graph": 2,
+        "domain": 4,
+        "failures": 3,
+        "react": 2
+      },
+      "seeds": [
+        512,
+        513,
+        514,
+        522,
+        525,
+        526,
+        527
+      ],
+      "status": "candidate (not admitted; needs held-out evidence)"
+    }
+  ]
+}
