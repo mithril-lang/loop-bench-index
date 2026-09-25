@@ -37,6 +37,8 @@ ONTOLOGY = ASSETS / 'terminal-actions-v2.mith'
 TASK_HELPER = ASSETS / 'mithril-task-state.cljk'
 PREFILL_HELPER = ASSETS / 'mithril-domain-prefill.cljk'
 PROBE_SCRIPT = ASSETS / 'ontology_probe.py'
+SERVER_SCRIPT = ASSETS / 'mithril-server.cljk'
+MITHRIL_RESIDENT = os.environ.get('BENCH_MITHRIL_RESIDENT', '0') == '1'
 STATE_SCHEMA = Path(MITHRIL) / 'ontology/state-graph-v1.mith'
 RUN_ROOT = Path(os.environ.get('BENCH_RUN_ROOT', '/tmp/mithril-harness'))
 MAX_STEPS = int(os.environ.get('BENCH_MAX_STEPS', '500'))
@@ -78,6 +80,54 @@ def strip_trailing_json_commas(source):
     return ''.join(output)
 
 
+class MithrilServer:
+    """One resident kbb process per agent (assets/mithril-server.cljk).
+    Requests are serialized; a dead or erroring server raises, never falls back."""
+
+    def __init__(self):
+        self.proc = None
+        self.lock = asyncio.Lock()
+        self.next_id = 0
+
+    async def start(self):
+        self.proc = await asyncio.create_subprocess_exec(
+            KBB, '--classpath', CLASSPATH, str(SERVER_SCRIPT), cwd=str(MITHRIL),
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            limit=16 * 1024 * 1024)
+        ready = await asyncio.wait_for(self.proc.stdout.readline(), 120)
+        if json.loads(ready or b'{}').get('ready') is not True:
+            err = (await self.proc.stderr.read())[-1200:].decode(errors='replace')
+            raise RuntimeError('Mithril server did not start: ' + err)
+
+    async def request(self, op, args, timeout=120):
+        async with self.lock:
+            if self.proc is None:
+                await self.start()
+            if self.proc.returncode is not None:
+                raise RuntimeError('Mithril server exited with ' + str(self.proc.returncode))
+            self.next_id += 1
+            self.proc.stdin.write((json.dumps({'id': self.next_id, 'op': op, 'args': [str(a) for a in args]}) + '\n').encode())
+            await self.proc.stdin.drain()
+            line = await asyncio.wait_for(self.proc.stdout.readline(), timeout)
+            if not line:
+                raise RuntimeError('Mithril server closed its output')
+            response = json.loads(line)
+            if response.get('id') != self.next_id:
+                raise RuntimeError(f'Mithril server answered request {response.get("id")}, expected {self.next_id}')
+            if not response.get('ok') or 'error' in response.get('result', {}):
+                raise RuntimeError(response.get('result'))
+            return response['result']
+
+    async def close(self):
+        if self.proc and self.proc.returncode is None:
+            self.proc.stdin.close()
+            try:
+                await asyncio.wait_for(self.proc.wait(), 5)
+            except asyncio.TimeoutError:
+                self.proc.kill()
+                await self.proc.wait()
+
+
 def last_json_object(raw, accept):
     decoder = json.JSONDecoder(); found = None
     for i, ch in enumerate(raw):
@@ -98,6 +148,7 @@ class HarnessLoop(BaseAgent):
     lane_id = None
     semantic = False
     transport = TRANSPORT
+    mithril_resident = MITHRIL_RESIDENT
 
     @staticmethod
     def name(): return 'hermes-gpt6-luna-terminal-loop'
@@ -193,8 +244,20 @@ class HarnessLoop(BaseAgent):
         return data
 
     # ---- Mithril semantic layer -----------------------------------------
+    async def mithril_request(self, op, cli_args, server_args, label):
+        if not self.mithril_resident:
+            return await self.kbb_json(cli_args, label)
+        if getattr(self, 'mithril_server', None) is None:
+            self.mithril_server = MithrilServer()
+        started = time.monotonic()
+        try:
+            return await self.mithril_server.request(op, server_args)
+        finally:
+            self.mith_wall_seconds += time.monotonic() - started
+
     async def mith(self, op, action='', outcome='true'):
-        return await self.kbb_json([str(HELPER), str(PROFILE), str(self.state), op, action, outcome], '')
+        return await self.mithril_request('bpmn', [str(HELPER), str(PROFILE), str(self.state), op, action, outcome],
+                                          [PROFILE, self.state, op, action, outcome], '')
 
     async def encode_task_state(self, instruction, phase):
         observed_text = json.dumps(self.history[-1].get('result', {}), ensure_ascii=False) if self.history else ''
@@ -213,8 +276,9 @@ class HarnessLoop(BaseAgent):
         state_path = self.state.with_suffix('.task.json')
         document_path = self.state.with_suffix('.task.jsonld')
         state_path.write_text(json.dumps(state, ensure_ascii=False))
-        receipt = await self.kbb_json([str(TASK_HELPER), str(state_path), str(document_path),
-                                       str(self.domain_ontology), str(STATE_SCHEMA)], 'Mithril task state: ')
+        receipt = await self.mithril_request(
+            'task-state', [str(TASK_HELPER), str(state_path), str(document_path), str(self.domain_ontology), str(STATE_SCHEMA)],
+            [state_path, document_path, self.domain_ontology, STATE_SCHEMA], 'Mithril task state: ')
         self.task_state_receipts.append(receipt)
         self.latest_state_receipt = receipt
         return receipt
@@ -513,6 +577,8 @@ class HarnessLoop(BaseAgent):
                 if self.semantic: await self.mith('complete', action_id, str(result['exit_code'] == 0).lower())
             self.record_usage(context, started, required)
         finally:
+            if getattr(self, 'mithril_server', None) is not None:
+                await self.mithril_server.close()
             (RUN_ROOT / 'receipts').mkdir(parents=True, exist_ok=True)
             (RUN_ROOT / 'receipts' / f'{self.run_id}.json').write_text(json.dumps({
                 'instruction_sha256': hashlib.sha256(instruction.encode()).hexdigest(),
@@ -559,6 +625,7 @@ class HarnessLoop(BaseAgent):
             'prompt_chars_total': sum(self.prompt_chars), 'required_artifacts': required,
             'artifact_count_confirmed': len(self.created_artifacts),
             'harness_version': self.version(), 'harness_lane': self.lane_id, 'transport': self.transport,
+            'mithril_resident': self.mithril_resident,
             'cache_read_tokens': sm('cache_read_tokens'), 'uncached_input_tokens': sm('input_tokens') + sm('cache_write_tokens'),
             'provider_api_calls': sm('api_calls')}
         context.metadata.update(self.extra_metadata())

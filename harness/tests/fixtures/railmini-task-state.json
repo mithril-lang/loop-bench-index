@@ -1,0 +1,28 @@
+{
+ "task_text": "railmini fixture task",
+ "phase": "hypothesize",
+ "hypotheses": [],
+ "latest_observation": {},
+ "action_count": 0,
+ "prefill_plan": {
+  "goals": [
+   "fixture goal"
+  ],
+  "constraints": [],
+  "hypotheses": [],
+  "focus_classes": [],
+  "focus_properties": []
+ },
+ "domain_focus_classes": [
+  "http://example.org/rail#OperationalPoint",
+  "http://example.org/rail#BorderPoint",
+  "http://example.org/rail#SectionOfLine",
+  "http://example.org/rail#SectionAuthorisation",
+  "http://example.org/rail#Submission"
+ ],
+ "domain_observed_classes": [
+  "http://example.org/rail#OperationalPoint",
+  "http://example.org/rail#BorderPoint",
+  "http://example.org/rail#SectionOfLine"
+ ]
+}

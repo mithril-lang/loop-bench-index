@@ -208,7 +208,7 @@ async def main_async(args, lanes_map, lanes):
     rows.sort(key=lambda r: (r['lane'], r['seed']))
     report = {'loop_wall_seconds': loop_wall, 'deadline_seconds': args.deadline, 'transport': os.environ['BENCH_TRANSPORT'],
               'model': os.environ.get('BENCH_MODEL', 'openai/gpt-6-luna'), 'reasoning': os.environ.get('BENCH_REASONING', 'medium'),
-              'max_steps': args.max_steps, 'difficulty': args.difficulty, 'trial_timeout_seconds': args.trial_timeout, 'seeds': args.seeds,
+              'max_steps': args.max_steps, 'difficulty': args.difficulty, 'mithril_resident': not args.mithril_cli, 'trial_timeout_seconds': args.trial_timeout, 'seeds': args.seeds,
               'summary': summarize(rows, lanes), 'rows': rows}
     Path(args.output, 'report.json').write_text(json.dumps(report, indent=2))
     print(json.dumps({'loop_wall_seconds': loop_wall, 'summary': report['summary']}, indent=2))
@@ -224,6 +224,7 @@ def main():
     parser.add_argument('--deadline', type=int, default=600)
     parser.add_argument('--transport', default='chat', choices=('chat', 'hermes'))
     parser.add_argument('--difficulty', type=int, default=3, choices=(1, 2, 3))
+    parser.add_argument('--mithril-cli', action='store_true', help='spawn kbb per Mithril call instead of the resident server')
     args = parser.parse_args()
     if Path(args.output).exists():
         raise RuntimeError(f'REFUSE: output exists: {args.output}')
@@ -240,7 +241,8 @@ def main():
     Path(args.output).mkdir(parents=True)
     os.environ.update({'MITHRIL_CLASSPATH': classpath, 'BENCH_MAX_STEPS': str(args.max_steps),
                        'BENCH_RUN_ROOT': str(Path(args.output).resolve() / 'run'), 'BENCH_TRANSPORT': args.transport,
-                       'BENCH_REPEAT_ID': 'micro-' + Path(args.output).name})
+                       'BENCH_REPEAT_ID': 'micro-' + Path(args.output).name,
+                       'BENCH_MITHRIL_RESIDENT': '0' if args.mithril_cli else '1'})
     sys.path.insert(0, str(HARNESS))
     from mithril_harness import lanes as lane_module  # env must be set before this import
     registry = {lane_id: getattr(lane_module, spec['import'].split(':')[1]) for lane_id, spec in lane_module.LANES.items()}
