@@ -159,6 +159,13 @@ async def trial(lane_id, lane_cls, seed, task_dir, args, run_root, family):
         for key in ('acceptance_runs', 'acceptance_pass', 'differential_submissions'):
             if key in meta:
                 row[key] = meta[key]
+        row['run_id'] = agent.run_id
+        artifacts = Path(run_root) / 'artifacts' / name
+        artifacts.mkdir(parents=True, exist_ok=True)
+        listing = await apodman('exec', name, 'bash', '-c', 'ls /app/*.py /app/*.txt /app/*.rq 2>/dev/null', check=False)
+        for path in listing.stdout.split():
+            await apodman('cp', f'{name}:{path}', str(artifacts / Path(path).name), check=False)
+        row['artifacts'] = sorted(p.name for p in artifacts.iterdir())
         result, verify_error = await verify(name, task_dir, family)
         if result is None:
             row.update({'status': 'unmeasured', 'verify_error': verify_error})
@@ -249,7 +256,7 @@ def main():
     parser.add_argument('--difficulty', type=int, default=3, choices=(1, 2, 3))
     parser.add_argument('--depth', type=int, default=6)
     parser.add_argument('--size', type=int, default=30)
-    parser.add_argument('--noise', type=int, default=1, choices=(0, 1, 2))
+    parser.add_argument('--noise', type=int, default=1, choices=(0, 1, 2, 3))
     parser.add_argument('--mithril-cli', action='store_true', help='spawn kbb per Mithril call instead of the resident server')
     args = parser.parse_args()
     if Path(args.output).exists():
