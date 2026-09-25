@@ -4,6 +4,7 @@ named by the role it plays in the derived model (see harness/README.md):
 - KnowledgeRetrieval  L0 prior knowledge: precompiled `.mith` rules (v7)
 - JevPriority         System-1 policy over a fixed option set (v7 behaviour)
 - DifferentialJudge   measured judge: harness-run row differential gates finish (v9a)
+- AutoAcceptance      typed acceptance check run by the harness after every modify
 """
 
 import asyncio
@@ -17,7 +18,8 @@ import urllib.request
 
 from .differential import (command_paths, compare, coverage_gaps,
                            independence_violations, validate_submission)
-from .loop import ASSETS
+from .acceptance import acceptance_command, spec_digest, spec_prompt, validate_spec
+from .loop import ASSETS, last_json_object
 
 KNOWLEDGE_LOOKUP = ASSETS / 'knowledge_lookup.cljk'
 KNOWLEDGE_GENERAL = ASSETS / 'knowledge' / 'general-reasoning-v1.mith'
@@ -292,3 +294,70 @@ class DifferentialJudge:
         self.passing_digest = await self.artifact_digest(environment, required) if overall == 0 else None
         return {'exit': overall, 'reason': reason, 'coverage_gaps': gaps, 'pairs': results,
                 'step': len(self.history), 'artifact_digest': self.passing_digest}
+
+
+ACCEPTANCE_TEXT = (
+    '\n\nHARNESS ACCEPTANCE CHECK (applies to this run): after every modify action the harness itself runs the '
+    'entrypoint on the target bundle and on a copy of each other bundle, checks that every source triple is '
+    'preserved and that added triples use only existing vocabulary, runs each query file on the output graph '
+    'and checks its column names. The report is appended to that modify action\'s observation. These checks '
+    'are not the task verifier and say nothing about whether the rows are correct.')
+ACCEPTANCE_REPORT_LIMIT = 6000
+
+
+class AutoAcceptance:
+    """One metered typed prefill extracts the acceptance spec; it is admitted only
+    if every value appears verbatim in the instruction (fail closed otherwise).
+    After each modify, the harness-generated acceptance command runs and its
+    report is appended to the modify observation. No model chooses it."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.acceptance_spec = None
+        self.acceptance_runs = []
+
+    def task_text(self, instruction):
+        return super().task_text(instruction) + ACCEPTANCE_TEXT
+
+    async def prefill_task(self, instruction, probe):
+        plan = await super().prefill_task(instruction, probe)
+        raw = await self.hermes_call(spec_prompt(instruction),
+                                     self.usage_dir / f'call-{len(self.calls):03}-acceptance.json', 'acceptance-prefill')
+        spec = last_json_object(raw, lambda c: 'entrypoint' in c)
+        normalized, reasons = validate_spec(spec, instruction, self.required_artifacts(instruction))
+        self.state.with_suffix('.acceptance-spec.json').write_text(
+            json.dumps({'proposed': spec, 'admitted': normalized, 'refusals': reasons}, indent=2))
+        if reasons:
+            raise RuntimeError('REFUSE acceptance spec: ' + ', '.join(reasons))
+        self.acceptance_spec = normalized
+        return plan
+
+    async def execute_action(self, environment, action):
+        result = await super().execute_action(environment, action)
+        if action['action'] != 'modify' or not self.acceptance_spec:
+            return result
+        started = time.monotonic()
+        try:
+            check = await environment.exec(command=acceptance_command(self.acceptance_spec), timeout_sec=300)
+            exit_code, out, err = check.return_code, check.stdout or '', check.stderr or ''
+        except RuntimeError as exc:
+            if 'timed out' not in str(exc).lower():
+                raise
+            exit_code, out, err = 124, '', 'acceptance check exceeded 300 seconds'
+        elapsed = round(time.monotonic() - started, 3)
+        self.acceptance_runs.append({'step': len(self.history), 'exit': exit_code, 'seconds': elapsed})
+        report = (out + ('\n' + err[-1500:] if err else ''))[-ACCEPTANCE_REPORT_LIMIT:]
+        result = dict(result)
+        result['stdout'] = (result.get('stdout') or '') + \
+            f'\n[HARNESS ACCEPTANCE CHECK after modify: exit {exit_code}]\n' + report
+        return result
+
+    def extra_metadata(self):
+        data = dict(super().extra_metadata())
+        exits = [r['exit'] for r in self.acceptance_runs]
+        data.update({'auto_acceptance': True,
+                     'acceptance_spec_digest': spec_digest(self.acceptance_spec) if self.acceptance_spec else None,
+                     'acceptance_runs': len(self.acceptance_runs),
+                     'acceptance_pass': exits.count(0),
+                     'acceptance_seconds': round(sum(r['seconds'] for r in self.acceptance_runs), 3)})
+        return data
