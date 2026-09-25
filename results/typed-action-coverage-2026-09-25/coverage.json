@@ -1,0 +1,85 @@
+{
+  "actions_total": 224,
+  "classifier": "harness/tools/action_coverage.py",
+  "hand_check": {
+    "agree": 27,
+    "classifier_authored_rater_pure": 2,
+    "classifier_pure_in_sample": 17,
+    "classifier_pure_rater_authored": 1,
+    "rater": "single, not blind to classifier output",
+    "rater_pure_in_sample": 18,
+    "sample": 30,
+    "seed": 20260925
+  },
+  "internal_entries": 6,
+  "receipt_sets": [
+    "v6 development trials (4)",
+    "v7 Luna+Mithril+Jev (1)",
+    "sequential knowledge pair (2)",
+    "harness judge-a pair (2)"
+  ],
+  "receipts": 9,
+  "signature": {
+    "by_kind": {
+      "inspect/authored": 36,
+      "inspect/pure": 68,
+      "modify/llm": 33,
+      "verify/authored": 20,
+      "verify/llm": 2,
+      "verify/pure": 59
+    },
+    "model_actions": 218,
+    "ops": {
+      "acceptance-check": 74,
+      "differential": 3,
+      "env-check": 4,
+      "grep-terms": 61,
+      "install-requirements": 2,
+      "list-files": 22,
+      "patch-file": 17,
+      "preservation-check": 5,
+      "python-probe": 34,
+      "run-entrypoint": 31,
+      "run-queries": 26,
+      "show-file": 24,
+      "sparql-probe": 27,
+      "workspace-setup": 10,
+      "write-file": 54
+    },
+    "pure_fraction": 0.5826,
+    "tiers": {
+      "authored": 56,
+      "llm": 35,
+      "pure": 127
+    }
+  },
+  "strict": {
+    "by_kind": {
+      "inspect/authored": 59,
+      "inspect/pure": 45,
+      "modify/llm": 33,
+      "verify/authored": 79,
+      "verify/llm": 2
+    },
+    "model_actions": 218,
+    "ops": {
+      "differential": 3,
+      "env-check": 4,
+      "grep-terms": 61,
+      "install-requirements": 2,
+      "list-files": 22,
+      "patch-file": 17,
+      "python-probe": 166,
+      "run-entrypoint": 31,
+      "show-file": 24,
+      "workspace-setup": 10,
+      "write-file": 54
+    },
+    "pure_fraction": 0.2064,
+    "tiers": {
+      "authored": 138,
+      "llm": 35,
+      "pure": 45
+    }
+  }
+}

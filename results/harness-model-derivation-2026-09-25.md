@@ -27,6 +27,7 @@ measured before any part of it can be called optimal.
 | E8 | Cost of the symbolic layer | Mithril helper 222–465 s per trial (17–25% of agent wall); ~36 s per action otherwise | v7 report |
 | E9 | Mithril's own action model | The runtime defines a typed semantic delta (`assert / retract / query / infer / compile / stop`) and notes that a Jev-like policy may select operation and arguments without a text decoder | `mithril-lang/mithril` README |
 | E11 | Differential judge as an agent lane (admission pair, one trial each) | 9/13 in both lanes. The judge passed twice while the verifier failed: the derivation shared the answer's error. Judge lane: 69% of tokens, 74% of cost, 32 vs 48 steps, with equal failure | [judge-a report](harness-judge-a-2026-09-25/report.md) |
+| E12 | Typed action coverage (rung 2) | 218 model actions in 9 receipts: pure 45 (strict) – 127 (signature); inspect 68/104, verify 59/81, modify 0/33 pure. `acceptance-check` is the largest operation (74 segments). Hand check 27/30 agree | [coverage report](typed-action-coverage-2026-09-25/report.md) |
 | E10 | Co-scientist judges in this workspace | `yui/coscientist.kotoba` and `sha256d/evolve.cljk` rank with deterministic Elo whose fitness is a measurement, never an LLM debate | those repositories |
 
 Two claims in the supplied material were **not** used as evidence. TypeSafe's
@@ -64,10 +65,10 @@ citation describes this harness.
   a finite action set. E6 shows every action was a newly generated command,
   so there was no earlier command to pick again. Jev is cheap (E5), but if
   nothing is choosable it saves nothing. Revived only on top of H3.
-- **H3** — required by H2/H5/H8 and anticipated by Mithril (E9). Coverage is
-  **unmeasured**: what fraction of the 146 logged actions a typed library could
-  express. The coarse 69/146 is an upper bound, not coverage. This is the
-  first measurement of the ladder, and it needs no model calls.
+- **H3** — required by H2/H5/H8 and anticipated by Mithril (E9). Measured
+  (E12): a generic 20-operation library expresses 20.6–58.3% of 218
+  model-chosen actions without model-written text. Most pure verify actions
+  are one composite acceptance check that needs no choice at all.
 - **H4** — the goal is right, but E7 limits it. Shrinking context without
   carrying the state it held failed. A subgraph context is admissible only
   after the belief graph demonstrably holds what the transcript held:
@@ -187,7 +188,7 @@ ladder. The runner refuses a `PLANNED` lane until its prerequisite is recorded.
 | Step | Lane | Prerequisite (measured before admission) | Falsified if |
 |---|---|---|---|
 | 1 | `judge` (H1) | implemented; admission pair run | judge exit 0 while the verifier fails. **Observed on the admission pair (E11).** Kept as a leaf score only |
-| 2 | `typed-actions` (H3) | offline coverage of the 146 logged actions by the typed library | coverage too low to remove any LLM call |
+| 2 | `typed-actions` (H3) | offline coverage by the typed library. **Measured: 20.6% (strict) – 58.3% (signature) of 218 model actions pure** ([report](typed-action-coverage-2026-09-25/report.md)) | coverage too low to remove any LLM call. Not falsified; first sub-lane `auto-acceptance` (a deterministic acceptance check after every modify) needs no policy |
 | 3 | `population` (H6) | judge–verifier agreement from step 1 | on held-out tasks, no success gain over `judge` at a matched token budget |
 | 4 | `jev-policy` (H2 on H3, H5, H8) | typed coverage; Jev calibration error on logged decisions | success lower than step 3, or LLM calls not reduced |
 | 5 | `belief-context` (H4) | state-carriage test | success lower than the transcript context at equal budget |
