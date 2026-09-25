@@ -68,12 +68,14 @@ class PodmanEnv:
 def usage_totals(usage_dir):
     totals = {'calls': 0, 'failed_attempts': 0, 'uncached_input_tokens': 0, 'cache_read_tokens': 0,
               'output_tokens': 0, 'reasoning_tokens': 0, 'cost_usd': 0.0, 'cost_missing': 0}
-    for path in sorted(Path(usage_dir).glob('*.json')):
+    for path in sorted(Path(usage_dir).glob('*.json')):  # .reply.txt files are raw text, not usage
         try:
             u = json.loads(path.read_text())
         except ValueError:
             totals['cost_missing'] += 1
             continue
+        if u.get('finish_reason') == 'length':
+            totals['length_capped_calls'] = totals.get('length_capped_calls', 0) + 1
         if u.get('partial'):
             totals['failed_attempts'] += 1
         else:
@@ -131,7 +133,9 @@ async def trial(lane_id, lane_cls, seed, task_dir, args, run_root):
             status = 'error'
             row['error'] = f'{type(exc).__name__}: {str(exc)[-400:]}'
         row['agent_wall_seconds'] = round(time.monotonic() - started, 3)
-        spans = {'model': agent.model_wall_seconds, 'exec': agent.exec_wall_seconds, 'mithril': agent.mith_wall_seconds}
+        spans = {'model': agent.model_wall_seconds, 'exec': agent.exec_wall_seconds, 'mithril': agent.mith_wall_seconds,
+                 'acceptance': getattr(agent, 'acceptance_wall_seconds', 0.0)}
+        row['multi_action_replies'] = getattr(agent, 'multi_action_replies', 0)
         row.update({'steps': len(agent.history), 'finished': bool(agent.history) and agent.history[-1]['action'] == 'finish',
                     'mithril_wall_seconds': round(agent.mith_wall_seconds, 3),
                     'spans_seconds': {k: round(v, 3) for k, v in spans.items()},
