@@ -80,8 +80,12 @@ LANES = {
 # Derived-model lanes (harness/README.md). Each names what must be measured
 # before it may be implemented and admitted to the runner.
 PLANNED = {
+    'auto-acceptance': {'adds': ['typed-action-ir', 'acceptance-after-modify'],
+                        'requires': 'acceptance parameters (entrypoint, bundles, queries, columns) derived from the '
+                                    'instruction by a typed prefill; coverage measured in '
+                                    'results/typed-action-coverage-2026-09-25 (20.6-58.3% pure)'},
     'typed-actions': {'adds': ['typed-action-ir'],
-                      'requires': 'coverage of logged actions by a typed action library, measured on receipts'},
+                      'requires': 'a policy that chooses pure operations; coverage measured (20.6-58.3% pure)'},
     'belief-context': {'adds': ['belief-graph-context'],
                        'requires': 'judge lane result; context built from L1-L3 graph instead of transcript'},
     'jev-policy': {'adds': ['typed-action-ir', 'jev-policy'],

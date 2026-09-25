@@ -16,6 +16,9 @@ harness/
     components.py    KnowledgeRetrieval, JevPriority, DifferentialJudge
     differential.py  pure row differential, independence and coverage checks
     lanes.py         LANES (runnable) and PLANNED (declared, refused by the runner)
+    typed_actions.py typed action library: pure / authored / llm operations with generators
+  tools/
+    action_coverage.py  classify logged actions against the library (strict / signature)
   assets/            Mithril helpers and ontologies (byte-identical copies of v6/v7)
   run.py             sequential lane runner with verifier and checksum refusals
   tests/             equivalence, judge-lane, differential tests and scripted doubles
@@ -53,8 +56,11 @@ Components change the loop only through five hooks:
 | `judge` | + DifferentialJudge (ablation a) | new |
 
 `PLANNED` lanes are not implemented, and `run.py` refuses them with their
-prerequisite: `typed-actions`, `belief-context`, `jev-policy`, `population`,
-`budget-controller`.
+prerequisite: `auto-acceptance`, `typed-actions`, `belief-context`,
+`jev-policy`, `population`, `budget-controller`.
+
+The typed action library and its measured coverage of logged actions are
+described in [results/typed-action-coverage-2026-09-25](../results/typed-action-coverage-2026-09-25/report.md).
 
 ## DifferentialJudge (`judge`)
 
@@ -90,7 +96,8 @@ The harness supplies no calculator, rule, or expected row.
 From the repository root:
 
 ```sh
-python3 -m unittest harness/tests/test_differential.py
+python3 -m unittest harness/tests/test_differential.py harness/tests/test_action_coverage.py \
+  harness/tests/test_typed_actions.py   # the last needs uv (fetches rdflib)
 PYTHONPATH=harness/tests <harbor-venv>/bin/python -m unittest \
   harness/tests/test_equivalence.py harness/tests/test_judge_lane.py
 ```
