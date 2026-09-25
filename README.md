@@ -48,6 +48,10 @@ records 39 metered Jev decisions on the pinned railway task. It retained the
 same 9/13 partial result as the Luna + Mithril reference; its success-qualified
 indices are null.
 
+The [co-scientist loop analysis](results/coscientist-loop-analysis-2026-09-25.md)
+reads the v5–v8 trials and proposes a measured-judge tournament design using
+Mithril OWL/SHACL; it is a design analysis with no new measurement.
+
 ## AA-Briefcase-Lite exploratory cohort
 
 `results/aa-briefcase-lite-w1-t1-gpt6-luna-v1/` records one retrospective
