@@ -24,6 +24,8 @@ from pathlib import Path
 
 from harbor.agents.base import BaseAgent
 
+from .chat import chat_complete
+
 ASSETS = Path(__file__).resolve().parents[1] / 'assets'
 HERMES = os.environ.get('HERMES_BIN', '/Users/junkawasaki/.hermes/hermes-agent/venv/bin/hermes')
 KBB = os.environ.get('KBB_BIN', '/opt/homebrew/bin/kbb')
@@ -42,6 +44,16 @@ REPEAT_ID = os.environ.get('BENCH_REPEAT_ID', 'development')
 CRITICAL_REVIEW = os.environ.get('BENCH_CRITICAL_REVIEW', '1') == '1'
 MAX_CONSECUTIVE_INSPECT = int(os.environ.get('BENCH_MAX_CONSECUTIVE_INSPECT', '6'))
 ACTIONS = ('inspect', 'modify', 'verify', 'finish')
+TRANSPORT = os.environ.get('BENCH_TRANSPORT', 'hermes')
+# Harness-written history entries: the model chose finish (or inspect) and the harness refused.
+REFUSED_FINISH = {'critical review gate', 'required artifact check', 'finish gate'}
+CHAT_OBSERVATION_CHARS = 8000
+CHAT_SINGLE_SYSTEM = 'Follow the output format the user asks for exactly. Do not add markdown.'
+CHAT_SYSTEM = ('You are a terminal task-solving agent. Return exactly one JSON object and no markdown: '
+               '{"action":"inspect|modify|verify|finish","command":"bash command","reason":"brief"}. '
+               'Commands execute in the isolated benchmark container. Multi-line bash commands and file edits are allowed. '
+               'Choose finish only after checking the required artifact or behavior. Do not repeat an unchanged failed command. '
+               'The JSON must parse strictly: no trailing commas or empty keys. For finish use command="true".')
 
 
 def strip_trailing_json_commas(source):
@@ -85,6 +97,7 @@ class HarnessLoop(BaseAgent):
     lane = 'baseline'
     lane_id = None
     semantic = False
+    transport = TRANSPORT
 
     @staticmethod
     def name(): return 'hermes-gpt6-luna-terminal-loop'
@@ -96,6 +109,7 @@ class HarnessLoop(BaseAgent):
         self.calls = []; self.failed_usage_files = []; self.history = []
         self.semantic_receipts = 0; self.task_state_receipts = []; self.hypotheses = []
         self.mith_wall_seconds = 0.0; self.prompt_chars = []
+        self.model_wall_seconds = 0.0; self.exec_wall_seconds = 0.0
         self.critical_review_requested = False; self.critical_review_done = False
         self.probe_data = None; self.plan = None; self.domain_receipt = None
         self.latest_state_receipt = None; self.created_artifacts = set()
@@ -113,7 +127,18 @@ class HarnessLoop(BaseAgent):
 
     # ---- model and tool boundaries --------------------------------------
     async def hermes_call(self, prompt, usage, kind):
-        """Retry a failed provider turn without rerunning a terminal action."""
+        """One single-turn model call. Retries a failed provider turn without
+        rerunning a terminal action. With the chat transport it is one direct
+        OpenRouter call instead of a Hermes process."""
+        if self.transport == 'chat':
+            started = time.monotonic()
+            try:
+                text = await chat_complete([{'role': 'system', 'content': CHAT_SINGLE_SYSTEM},
+                                            {'role': 'user', 'content': prompt}], usage)
+            finally:
+                self.model_wall_seconds += time.monotonic() - started
+            self.calls.append({'usage_file': str(usage), 'exit_code': 0, 'kind': kind})
+            return text
         model = os.environ.get('BENCH_MODEL', 'openai/gpt-6-luna')
         failures = []
         for attempt in range(3):
@@ -142,6 +167,13 @@ class HarnessLoop(BaseAgent):
         raise RuntimeError(f'Hermes {kind} failed after {len(failures)} attempt(s): {json.dumps(failures)}')
 
     async def shell(self, environment, command):
+        started = time.monotonic()
+        try:
+            return await self._shell(environment, command)
+        finally:
+            self.exec_wall_seconds += time.monotonic() - started
+
+    async def _shell(self, environment, command):
         try:
             res = await environment.exec(command=command, timeout_sec=120)
             return {'exit_code': res.return_code, 'stdout': (res.stdout or '')[-12000:], 'stderr': (res.stderr or '')[-4000:]}
@@ -288,8 +320,81 @@ class HarnessLoop(BaseAgent):
                      'Return action="verify"; revise the files if it fails. Do not finish in this turn.')
         return text
 
+    def chat_render(self, h):
+        if h['action'] == 'controller':
+            return [{'role': 'assistant', 'content': json.dumps({'action': 'inspect'})},
+                    {'role': 'user', 'content': 'HARNESS: ' + json.dumps(h['result'], ensure_ascii=False)}]
+        if h['command'] in REFUSED_FINISH:
+            return [{'role': 'assistant', 'content': json.dumps({'action': 'finish', 'command': 'true'})},
+                    {'role': 'user', 'content': 'HARNESS: ' + json.dumps(h['result'], ensure_ascii=False)}]
+        result = h['result']
+        observation = {'exit_code': result.get('exit_code'),
+                       'stdout': (result.get('stdout') or '')[-CHAT_OBSERVATION_CHARS:],
+                       'stderr': (result.get('stderr') or '')[-2000:]}
+        return [{'role': 'assistant', 'content': json.dumps({'action': h['action'], 'command': h['command']},
+                                                            ensure_ascii=False)},
+                {'role': 'user', 'content': 'OBSERVATION: ' + json.dumps(observation, ensure_ascii=False)}]
+
+    def chat_semantic_static(self):
+        """The parts of the semantic prompt that are fixed after prefill, sent once."""
+        return ('PREFILLED TASK ONTOLOGY: ' + json.dumps(self.plan, ensure_ascii=False)
+                + '\nOWL-ENTAILED SOURCE CLASS FAMILIES: '
+                + json.dumps(self.domain_receipt.get('entailed-descendants', {}), ensure_ascii=False)
+                + '\nUse a Co-Scientist cycle: propose a concrete hypothesis, run the cheapest command that can refute it, '
+                'record what the output changed, then revise. Return fields hypothesis and prediction alongside action. '
+                'After two inspections, favor producing and checking the required files. '
+                'A finish action is refused while required files are missing. '
+                'Use only source vocabulary when adding RDF triples. Resolve one uncertain ontology relation or '
+                'data-normalization hypothesis per experiment; test the standalone query files on the generated graph before finish.')
+
+    def chat_semantic_volatile(self, instruction):
+        missing = [p for p in self.required_artifacts(instruction) if p not in self.created_artifacts]
+        text = (f'RESEARCH PHASE: {self.phase()}. Required artifacts still unconfirmed: {missing}. '
+                f'ACTIVE HYPOTHESES: {json.dumps(self.hypotheses[-3:], ensure_ascii=False)}'
+                '\nLATEST DOMAIN EVIDENCE: '
+                + json.dumps((self.latest_state_receipt or {}).get('domain-entailed', {}), ensure_ascii=False))
+        streak = self.inspect_streak()
+        if streak >= MAX_CONSECUTIVE_INSPECT:
+            text += ('\nEXPERIMENT BUDGET: The last ' + str(streak) + ' actions only inspected data. '
+                     'Create the required artifacts now. Inspect is unavailable until after a modify or verify action.')
+        if getattr(self, 'jev_guidance', None):
+            text += '\nTYPED JEV PRIORITY (a hypothesis to test, not an accepted fact): ' + self.jev_guidance
+        if getattr(self, 'knowledge_guidance', None):
+            text += '\nPRECOMPILED MITH KNOWLEDGE (source verification required): ' + self.knowledge_guidance
+        if CRITICAL_REVIEW and self.critical_review_requested and not self.critical_review_done:
+            text += ('\nCRITICAL REVIEW REQUIRED: Challenge the solution as a skeptical reviewer. Run a concrete '
+                     'verification command that checks generated triples use only source vocabulary, the query files '
+                     'execute directly over the generated graph, and the stated edge cases. Return action="verify"; '
+                     'revise the files if it fails. Do not finish in this turn.')
+        return text
+
+    def chat_messages(self, instruction, enabled):
+        """Fully append-only (measured: the provider reuses its cache only when
+        the previous request's whole prompt is a prefix of the next). Each call
+        appends the actions/observations since the last call, then one short
+        volatile message, and keeps all of it for the next call."""
+        if not getattr(self, 'chat_log', None):
+            self.chat_log = [{'role': 'system', 'content': CHAT_SYSTEM},
+                             {'role': 'user', 'content': 'TASK:\n' + self.task_text(instruction)}]
+            if self.semantic:
+                self.chat_log.append({'role': 'user', 'content': self.chat_semantic_static()})
+            self.chat_rendered = 0
+        for h in self.history[self.chat_rendered:]:
+            self.chat_log += self.chat_render(h)
+        self.chat_rendered = len(self.history)
+        volatile = f'ALLOWED ACTIONS: {enabled}'
+        if self.semantic:
+            volatile += '\n' + self.chat_semantic_volatile(instruction)
+        self.chat_log.append({'role': 'user', 'content': volatile + '\nExecute the next action.'})
+        return list(self.chat_log)
+
     async def query(self, instruction, enabled):
         n = len(self.calls)
+        if self.transport == 'chat':
+            messages = self.chat_messages(instruction, enabled)
+            self.prompt_chars.append(sum(len(m['content']) for m in messages))
+            raw = (await self.chat_call(messages, self.usage_dir / f'call-{n:03}.json', 'action')).strip()
+            return await self.parse_action(raw, n)
         transcript = json.dumps(self.history, ensure_ascii=False)
         prompt = ("You are a terminal task-solving agent. Return exactly one JSON object and no markdown: "
                   '{"action":"inspect|modify|verify|finish","command":"bash command","reason":"brief"}. '
@@ -304,6 +409,18 @@ class HarnessLoop(BaseAgent):
             prompt += self.semantic_prompt(instruction)
         self.prompt_chars.append(len(prompt))
         raw = (await self.hermes_call(prompt, self.usage_dir / f'call-{n:03}.json', 'action')).strip()
+        return await self.parse_action(raw, n)
+
+    async def chat_call(self, messages, usage, kind):
+        started = time.monotonic()
+        try:
+            text = await chat_complete(messages, usage)
+        finally:
+            self.model_wall_seconds += time.monotonic() - started
+        self.calls.append({'usage_file': str(usage), 'exit_code': 0, 'kind': kind})
+        return text
+
+    async def parse_action(self, raw, n):
         valid = lambda c: c.get('action') in ACTIONS
         action = last_json_object(raw, valid)
         if action is None:
@@ -441,5 +558,7 @@ class HarnessLoop(BaseAgent):
             'mithril_wall_seconds': round(self.mith_wall_seconds, 3),
             'prompt_chars_total': sum(self.prompt_chars), 'required_artifacts': required,
             'artifact_count_confirmed': len(self.created_artifacts),
-            'harness_version': self.version(), 'harness_lane': self.lane_id}
+            'harness_version': self.version(), 'harness_lane': self.lane_id, 'transport': self.transport,
+            'cache_read_tokens': sm('cache_read_tokens'), 'uncached_input_tokens': sm('input_tokens') + sm('cache_write_tokens'),
+            'provider_api_calls': sm('api_calls')}
         context.metadata.update(self.extra_metadata())

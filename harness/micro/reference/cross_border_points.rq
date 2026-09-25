@@ -1,0 +1,12 @@
+PREFIX rl: <http://example.org/rail#>
+SELECT ?pointId (COALESCE(SAMPLE(?la), -200.0) AS ?latitude) (COALESCE(SAMPLE(?lo), -200.0) AS ?longitude)
+       (COUNT(DISTINCT ?country) AS ?countryCount) (COUNT(DISTINCT ?section) AS ?adjacentSectionCount)
+WHERE {
+  ?p a rl:OperationalPoint ; rl:opId ?pointId ; rl:inCountry ?country .
+  FILTER(STRSTARTS(STR(?p), "urn:physical:"))
+  OPTIONAL { ?p rl:lat ?la ; rl:long ?lo }
+  OPTIONAL { { ?section rl:startsAt ?p } UNION { ?section rl:endsAt ?p } }
+}
+GROUP BY ?pointId
+HAVING (COUNT(DISTINCT ?country) >= 2)
+ORDER BY ?pointId

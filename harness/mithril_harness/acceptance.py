@@ -17,7 +17,7 @@ from pathlib import PurePosixPath
 from .typed_actions import acceptance_check, result_contract
 
 COPY_ROOT = os.environ.get('HARNESS_ACCEPTANCE_COPY_ROOT', '/tmp/harness-acceptance')  # inside the task container
-SPEC_KEYS = ('entrypoint', 'bundles', 'target_bundle', 'output_file', 'queries')
+SPEC_KEYS = ('entrypoint', 'bundles', 'target_bundle', 'output_file', 'sources', 'queries')
 
 
 def spec_prompt(instruction):
@@ -26,6 +26,7 @@ def spec_prompt(instruction):
             '"bundles":["absolute paths of every input directory the task names"],'
             '"target_bundle":"the directory the solution must process",'
             '"output_file":"file name the script writes into a bundle",'
+            '"sources":["the input files the task says the output must preserve: exact file names, or *.ext for a whole extension"],'
             '"queries":[{"path":"absolute path of a query file","columns":["exact result column names, if stated"]}]}. '
             'Copy every value verbatim from the task text; use [] for columns the task does not name. '
             'Do not solve the task.\nTASK:\n' + instruction)
@@ -53,6 +54,15 @@ def validate_spec(spec, instruction, required):
         reasons.append(f'target-not-a-bundle:{target}')
     if not verbatim(spec['output_file']) or '/' in str(spec['output_file']):
         reasons.append(f'not-in-instruction:output_file:{spec["output_file"]}')
+    patterns = spec['sources'] if isinstance(spec['sources'], list) else []
+    if not patterns:
+        reasons.append('no-sources')
+    for pattern in patterns:
+        ok = isinstance(pattern, str) and (
+            (not any(c in pattern for c in '*?[/') and f'`{pattern}`' in instruction) or
+            (pattern.startswith('*.') and not any(c in pattern[2:] for c in '*?[/') and f'`{pattern[1:]}`' in instruction))
+        if not ok:
+            reasons.append(f'source-not-in-instruction:{pattern}')
     queries = spec['queries'] if isinstance(spec['queries'], list) else []
     if not queries:
         reasons.append('no-queries')
@@ -74,7 +84,7 @@ def validate_spec(spec, instruction, required):
     if reasons:
         return None, reasons
     normalized = {'entrypoint': entry, 'bundles': [b.rstrip('/') for b in bundles],
-                  'target_bundle': target.rstrip('/'), 'output_file': spec['output_file'],
+                  'target_bundle': target.rstrip('/'), 'output_file': spec['output_file'], 'sources': patterns,
                   'queries': normalized_queries}
     return normalized, []
 
@@ -90,7 +100,7 @@ def acceptance_command(spec):
     for bundle, copy in zip([b for b in spec['bundles'] if b != target], copies):
         setup.append(f'cp -R {bundle} {copy} && rm -f {copy}/{spec["output_file"]}')
     checks = acceptance_check(spec['entrypoint'], [target] + copies,
-                              [q['path'] for q in spec['queries']], spec['output_file'])
+                              [q['path'] for q in spec['queries']], spec['output_file'], spec['sources'])
     contracts = {q['path']: q['columns'] for q in spec['queries'] if q['columns']}
     tail = []
     if contracts:

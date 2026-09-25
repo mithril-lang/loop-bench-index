@@ -31,10 +31,12 @@ def load(paths):
         else:
             raise SystemExit(f'UNPARSEABLE {p}')
     return g
-def sources(bundle, output_name):
+def sources(bundle, output_name, patterns=('*.owl', '*.ttl')):
     b = Path(bundle)
-    return sorted(b.glob('*.owl')) + sorted(p for p in b.glob('*.ttl') if p.name != output_name)
+    found = {p for pattern in patterns for p in b.glob(pattern) if p.name != output_name}
+    return sorted(found)
 '''
+DEFAULT_SOURCES = ('*.owl', '*.ttl')
 
 
 def py(body, *args):
@@ -112,24 +114,24 @@ for q in sys.argv[2:]:
 ''', graph, *query_files)
 
 
-def preservation_check(bundle, output_name='unified.ttl'):
+def preservation_check(bundle, output_name='unified.ttl', patterns=DEFAULT_SOURCES):
     return py(r'''
-import sys
+import sys, json
 from rdflib.compare import to_isomorphic, graph_diff
-src = load(sources(sys.argv[1], sys.argv[2]))
+src = load(sources(sys.argv[1], sys.argv[2], json.loads(sys.argv[3])))
 out = load([Path(sys.argv[1]) / sys.argv[2]])
 both, only_src, only_out = graph_diff(to_isomorphic(src), to_isomorphic(out))
 print('SOURCE_TRIPLES', len(src), 'OUTPUT_TRIPLES', len(out), 'MISSING_FROM_OUTPUT', len(only_src), 'ADDED', len(only_out), sep='\t')
 for t in list(only_src)[:20]: print('MISSING', *[x.n3() for x in t], sep='\t')
 raise SystemExit(0 if len(only_src) == 0 else 1)
-''', bundle, output_name)
+''', bundle, output_name, json.dumps(list(patterns)))
 
 
-def vocabulary_check(bundle, output_name='unified.ttl'):
+def vocabulary_check(bundle, output_name='unified.ttl', patterns=DEFAULT_SOURCES):
     return py(r'''
-import sys
+import sys, json
 from rdflib import RDF
-src = load(sources(sys.argv[1], sys.argv[2]))
+src = load(sources(sys.argv[1], sys.argv[2], json.loads(sys.argv[3])))
 out = load([Path(sys.argv[1]) / sys.argv[2]])
 known = set(src.predicates()) | set(src.objects(None, RDF.type)) | set(src.subjects())
 added = set(out) - set(src)
@@ -137,16 +139,18 @@ bad = sorted({t for s, p, o in added for t in ([p] + ([o] if p == RDF.type else 
 print('ADDED_TRIPLES', len(added), 'UNKNOWN_TERMS', len(bad), sep='\t')
 for t in bad[:20]: print('UNKNOWN', t.n3(), sep='\t')
 raise SystemExit(0 if not bad else 1)
-''', bundle, output_name)
+''', bundle, output_name, json.dumps(list(patterns)))
 
 
-def acceptance_check(entrypoint, bundles, query_files, output_name='unified.ttl'):
-    """Run the entrypoint on each bundle, then preservation, vocabulary and queries."""
+def acceptance_check(entrypoint, bundles, query_files, output_name='unified.ttl', patterns=DEFAULT_SOURCES):
+    """Run the entrypoint on each bundle, then preservation, vocabulary and queries.
+    `patterns` names the source files (the task's own definition; a bundle can
+    hold other files, e.g. SHACL shapes, that are not sources)."""
     steps = []
     for bundle in bundles:
         out = f'{bundle.rstrip("/")}/{output_name}'
         steps += [f'echo "== bundle {bundle}"', run_entrypoint(entrypoint, bundle),
-                  preservation_check(bundle, output_name), vocabulary_check(bundle, output_name),
+                  preservation_check(bundle, output_name, patterns), vocabulary_check(bundle, output_name, patterns),
                   run_queries(out, query_files)]
     return 'set -e\n' + '\n'.join(steps)
 

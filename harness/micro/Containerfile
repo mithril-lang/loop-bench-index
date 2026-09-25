@@ -1,0 +1,5 @@
+# Micro-task image: the same interpreter and rdflib pin as the Terminal-Bench
+# ontology-kg-querying image (python:3.12-slim, rdflib==7.1.4), without task data.
+FROM docker.io/library/python:3.12-slim
+RUN python3 -m pip install --no-cache-dir rdflib==7.1.4
+WORKDIR /app
