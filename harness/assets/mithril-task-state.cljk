@@ -1,0 +1,58 @@
+(ns terminal-bench.mithril-task-state
+  (:require [mithril.compiler :as compiler]
+            [mithril.state-rdf :as state-rdf]
+            [mithril.state-ontology :as state-ontology]
+            [oak.semantic :as oak]))
+
+(def fs (js/require "node:fs"))
+(def root "https://mithril.fund/id/class/")
+(defn emit! [value] (println (.stringify js/JSON (clj->js value))))
+(defn read-json [path] (js->clj (.parse js/JSON (.readFileSync fs path "utf8"))))
+
+(let [[state-path document-path ontology-path schema-path] *command-line-args*]
+  (try
+    (let [state (read-json state-path)
+          document (state-rdf/document state)
+          decoded (state-rdf/decode-document! document)
+          _ (when-not (= state decoded) (throw (ex-info "state roundtrip mismatch" {})))
+          schema (state-ontology/schema (.readFileSync fs schema-path "utf8"))
+          report (state-ontology/validate! schema (state-rdf/quads document))
+          _ (when-not (:valid? report) (throw (ex-info "state SHACL violation" report)))
+          ontology (compiler/compile-ontology-text ontology-path (.readFileSync fs ontology-path "utf8"))
+          classes (filter #(= "owl:Class" (get % "@type")) (get-in ontology [:rdf-dataset "@graph"]))
+          axioms (set (for [c classes :when (get c "subClassOf")]
+                        (oak/triple (get c "@id") :rdfs/subClassOf (get c "subClassOf"))))
+          phase (get state "phase")
+          subject "https://mithril.fund/id/task/current"
+          asserted (case phase
+                     "hypothesize" (str root "HypothesisState")
+                     "experiment" (str root "ExperimentState")
+                     "reflect" (str root "ReflectionState")
+                     "verify" (str root "VerificationState")
+                     "complete" (str root "CompleteState")
+                     (throw (ex-info "invalid task phase" {:phase phase})))
+          inferred (oak/materialize :owl2-rl (conj axioms (oak/triple subject :rdf/type asserted)))
+          entailed? (contains? inferred (oak/triple subject :rdf/type (str root "ResearchState")))
+          _ (when-not entailed? (throw (ex-info "task class not entailed" {:phase phase})))
+          observed (vec (take 24 (get state "domain_observed_classes" [])))
+          focus (vec (take 12 (get state "domain_focus_classes" [])))
+          domain-entailed
+          (into {}
+                (for [observed-class observed
+                      :let [evidence-subject (str "https://mithril.fund/id/evidence/" (js/encodeURIComponent observed-class))
+                            closure (oak/materialize :owl2-rl
+                                     (conj axioms (oak/triple evidence-subject :rdf/type observed-class)))]]
+                  [observed-class
+                   (vec (filter #(contains? closure
+                                            (oak/triple evidence-subject :rdf/type %)) focus))]))
+          digest (state-rdf/graph-digest document)]
+      (.writeFileSync fs document-path (.stringify js/JSON (clj->js document)))
+      (emit! {:codec "mithril.state-rdf/document+decode-document!"
+              :state-graph-digest digest :state-graph-nodes (count (get document "@graph"))
+              :owl-profile "owl2-rl" :task-state-entailed entailed?
+              :domain-entailed domain-entailed :domain-observed-count (count observed)
+              :shacl-valid (:valid? report) :checked-nodes (:checked-nodes report)
+              :phase phase}))
+    (catch :default e
+      (emit! {:error (or (.-message e) (str e))})
+      (set! (.-exitCode js/process) 2))))

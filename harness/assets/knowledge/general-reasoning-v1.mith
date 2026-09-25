@@ -1,0 +1,22 @@
+(mithril/ontology
+  :id "https://mithril.fund/id/ontology/agent-general-reasoning-v1"
+  :profile ["https://www.w3.org/TR/rdf11-concepts/" "https://www.w3.org/TR/owl2-profiles/#OWL_2_RL" "https://www.w3.org/TR/shacl/"]
+  :graph
+  [(owl/class :id "https://mithril.fund/id/bench/class/Problem")
+   (owl/class :id "https://mithril.fund/id/bench/class/SourceStatement")
+   (owl/class :id "https://mithril.fund/id/bench/class/CanonicalEntity")
+   (owl/class :id "https://mithril.fund/id/bench/class/InferenceRule")
+   (owl/class :id "https://mithril.fund/id/bench/class/IdentityRule" :rdfs/sub-class-of "https://mithril.fund/id/bench/class/InferenceRule")
+   (owl/class :id "https://mithril.fund/id/bench/class/TemporalRule" :rdfs/sub-class-of "https://mithril.fund/id/bench/class/InferenceRule")
+   (owl/class :id "https://mithril.fund/id/bench/class/UnitRule" :rdfs/sub-class-of "https://mithril.fund/id/bench/class/InferenceRule")
+   (owl/class :id "https://mithril.fund/id/bench/class/AggregationRule" :rdfs/sub-class-of "https://mithril.fund/id/bench/class/InferenceRule")
+   (owl/class :id "https://mithril.fund/id/bench/class/VerificationRule" :rdfs/sub-class-of "https://mithril.fund/id/bench/class/InferenceRule")
+   (owl/class :id "https://mithril.fund/id/bench/class/Counterexample")
+   (owl/object-property :id "https://mithril.fund/id/bench/property/supportedBy" :rdfs/domain "https://mithril.fund/id/bench/class/CanonicalEntity" :rdfs/range "https://mithril.fund/id/bench/class/SourceStatement")
+   (owl/object-property :id "https://mithril.fund/id/bench/property/usesRule" :rdfs/domain "https://mithril.fund/id/bench/class/Problem" :rdfs/range "https://mithril.fund/id/bench/class/InferenceRule")
+   (owl/object-property :id "https://mithril.fund/id/bench/property/refutedBy" :rdfs/domain "https://mithril.fund/id/bench/class/InferenceRule" :rdfs/range "https://mithril.fund/id/bench/class/Counterexample")
+   (rdf/node :id "https://mithril.fund/id/bench/rule/identity" :rdf/type "https://mithril.fund/id/bench/class/IdentityRule" :text "Group source records into one physical entity only with source-supported identity evidence. Keep every original statement and record the evidence used for grouping.")
+   (rdf/node :id "https://mithril.fund/id/bench/rule/temporal" :rdf/type "https://mithril.fund/id/bench/class/TemporalRule" :text "Resolve conflicting facts by the latest applicable submission within that fact's scope. A valid-from and valid-until interval must be checked at the task's stated date before counting an authorization.")
+   (rdf/node :id "https://mithril.fund/id/bench/rule/units" :rdf/type "https://mithril.fund/id/bench/class/UnitRule" :text "Parse numeric values with their units and normalize before threshold comparison. Preserve the raw value as provenance; do not equate V and kV lexically.")
+   (rdf/node :id "https://mithril.fund/id/bench/rule/aggregation" :rdf/type "https://mithril.fund/id/bench/class/AggregationRule" :text "Aggregate over canonical entities and distinct source identifiers at the specified scope. OWL class entailment alone does not compute SPARQL result rows or closed-world counts.")
+   (rdf/node :id "https://mithril.fund/id/bench/rule/differential" :rdf/type "https://mithril.fund/id/bench/class/VerificationRule" :text "Calculate expected rows independently from source records, run the standalone query over the generated graph, and compare missing and extra rows with source provenance. No input or failed execution is unmeasured, never pass.")])

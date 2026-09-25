@@ -52,6 +52,11 @@ The [co-scientist loop analysis](results/coscientist-loop-analysis-2026-09-25.md
 reads the v5–v8 trials and proposes a measured-judge tournament design using
 Mithril OWL/SHACL; it is a design analysis with no new measurement.
 
+The [Mithril harness](harness/README.md) is the maintained loop: one executor,
+composable components (knowledge, Jev priority, differential judge) and a lane
+registry, byte-equivalent to the frozen v6/v7 agents it reproduces. Its target
+model is derived in [the harness model derivation](results/harness-model-derivation-2026-09-25.md).
+
 ## AA-Briefcase-Lite exploratory cohort
 
 `results/aa-briefcase-lite-w1-t1-gpt6-luna-v1/` records one retrospective
