@@ -1,0 +1,216 @@
+{
+  "loops": [
+    {
+      "report": "/var/folders/h_/bx1m0lv90qxb1sdrx5tqn8b80000gn/T/gen2-531/report.json",
+      "loop_wall_seconds": 163.761,
+      "seeds": [
+        531,
+        532,
+        533,
+        534,
+        535,
+        536
+      ]
+    },
+    {
+      "report": "/var/folders/h_/bx1m0lv90qxb1sdrx5tqn8b80000gn/T/gen2-537/report.json",
+      "loop_wall_seconds": 174.328,
+      "seeds": [
+        537,
+        538,
+        539,
+        540,
+        541,
+        542
+      ]
+    }
+  ],
+  "seeds": [
+    531,
+    532,
+    533,
+    534,
+    535,
+    536,
+    537,
+    538,
+    539,
+    540,
+    541,
+    542
+  ],
+  "lanes": {
+    "domain-v3": {
+      "trials": 12,
+      "measured": 12,
+      "not_measured": [],
+      "successes": 11,
+      "success_rate": 0.9167,
+      "mean_assertion_fraction": 0.9524,
+      "finished_rate": 1.0,
+      "timeouts": 0,
+      "cost_usd": 0.105413,
+      "cost_per_success_usd": 0.009583,
+      "median_trial_wall_seconds": 130.0865,
+      "median_steps": 12.0,
+      "cache_hit_ratio": 0.8741,
+      "output_tokens": 110042
+    },
+    "grounded": {
+      "trials": 12,
+      "measured": 12,
+      "not_measured": [],
+      "successes": 11,
+      "success_rate": 0.9167,
+      "mean_assertion_fraction": 0.9643,
+      "finished_rate": 1.0,
+      "timeouts": 0,
+      "cost_usd": 0.068428,
+      "cost_per_success_usd": 0.006221,
+      "median_trial_wall_seconds": 92.5095,
+      "median_steps": 9.0,
+      "cache_hit_ratio": 0.8295,
+      "output_tokens": 74289
+    },
+    "invariants": {
+      "trials": 12,
+      "measured": 12,
+      "not_measured": [],
+      "successes": 12,
+      "success_rate": 1.0,
+      "mean_assertion_fraction": 1.0,
+      "finished_rate": 1.0,
+      "timeouts": 0,
+      "cost_usd": 0.078359,
+      "cost_per_success_usd": 0.00653,
+      "median_trial_wall_seconds": 108.04050000000001,
+      "median_steps": 9.0,
+      "cache_hit_ratio": 0.8259,
+      "output_tokens": 78193
+    },
+    "react": {
+      "trials": 12,
+      "measured": 12,
+      "not_measured": [],
+      "successes": 11,
+      "success_rate": 0.9167,
+      "mean_assertion_fraction": 0.9643,
+      "finished_rate": 1.0,
+      "timeouts": 0,
+      "cost_usd": 0.079688,
+      "cost_per_success_usd": 0.007244,
+      "median_trial_wall_seconds": 98.8385,
+      "median_steps": 10.0,
+      "cache_hit_ratio": 0.8195,
+      "output_tokens": 86555
+    },
+    "schema": {
+      "trials": 12,
+      "measured": 12,
+      "not_measured": [],
+      "successes": 11,
+      "success_rate": 0.9167,
+      "mean_assertion_fraction": 0.9762,
+      "finished_rate": 1.0,
+      "timeouts": 0,
+      "cost_usd": 0.072975,
+      "cost_per_success_usd": 0.006634,
+      "median_trial_wall_seconds": 104.69749999999999,
+      "median_steps": 10.0,
+      "cache_hit_ratio": 0.8455,
+      "output_tokens": 86149
+    }
+  },
+  "pairs": {
+    "domain-v3 vs grounded": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_domain-v3": 1,
+      "success_only_grounded": 1,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_grounded_minus_domain-v3": 0.0119,
+      "mean_cost_diff_usd_grounded_minus_domain-v3": -0.003082
+    },
+    "domain-v3 vs invariants": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_domain-v3": 0,
+      "success_only_invariants": 1,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_invariants_minus_domain-v3": 0.0476,
+      "mean_cost_diff_usd_invariants_minus_domain-v3": -0.002254
+    },
+    "domain-v3 vs react": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_domain-v3": 0,
+      "success_only_react": 0,
+      "mcnemar_exact_p": null,
+      "mean_assertion_fraction_diff_react_minus_domain-v3": 0.0119,
+      "mean_cost_diff_usd_react_minus_domain-v3": -0.002144
+    },
+    "domain-v3 vs schema": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_domain-v3": 1,
+      "success_only_schema": 1,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_schema_minus_domain-v3": 0.0238,
+      "mean_cost_diff_usd_schema_minus_domain-v3": -0.002703
+    },
+    "grounded vs invariants": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_grounded": 0,
+      "success_only_invariants": 1,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_invariants_minus_grounded": 0.0357,
+      "mean_cost_diff_usd_invariants_minus_grounded": 0.000828
+    },
+    "grounded vs react": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_grounded": 1,
+      "success_only_react": 1,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_react_minus_grounded": 0.0,
+      "mean_cost_diff_usd_react_minus_grounded": 0.000938
+    },
+    "grounded vs schema": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_grounded": 1,
+      "success_only_schema": 1,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_schema_minus_grounded": 0.0119,
+      "mean_cost_diff_usd_schema_minus_grounded": 0.000379
+    },
+    "invariants vs react": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_invariants": 1,
+      "success_only_react": 0,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_react_minus_invariants": -0.0357,
+      "mean_cost_diff_usd_react_minus_invariants": 0.000111
+    },
+    "invariants vs schema": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_invariants": 1,
+      "success_only_schema": 0,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_schema_minus_invariants": -0.0238,
+      "mean_cost_diff_usd_schema_minus_invariants": -0.000449
+    },
+    "react vs schema": {
+      "paired_seeds": 12,
+      "excluded_seeds": [],
+      "success_only_react": 1,
+      "success_only_schema": 1,
+      "mcnemar_exact_p": 1.0,
+      "mean_assertion_fraction_diff_schema_minus_react": 0.0119,
+      "mean_cost_diff_usd_schema_minus_react": -0.000559
+    }
+  }
+}
