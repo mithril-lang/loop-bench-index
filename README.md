@@ -61,6 +61,11 @@ The [10-minute verification loop](results/micro-loop-2026-09-25/report.md)
 runs harness lanes on seeded railmini micro tasks in parallel, with a
 prompt-cache-aware chat transport and a resident Mithril helper.
 
+The [Terminal-Bench co-scientist record](results/tb-coscientist-gen0-2026-09-25/report.md)
+compares the Mithril harness with an AA-aligned mini-swe-agent on real
+Terminal-Bench 4.0 tasks: generation 0 results, the unmeasured generation 1
+and the resume point.
+
 ## AA-Briefcase-Lite exploratory cohort
 
 `results/aa-briefcase-lite-w1-t1-gpt6-luna-v1/` records one retrospective

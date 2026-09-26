@@ -64,3 +64,56 @@ Generation 1 replaces the self-written tests with an independent acceptance
 review (`review` lane): a fresh single-turn model call writes tests from
 the specification and file names only, and the harness runs them before
 finish.
+
+## State at closing (2026-09-26)
+
+**Implemented and tested:**
+- `review` lane (`IndependentReview`, `harness/mithril_harness/review.py`)
+  with the empty-reply retry note in the chat transport.
+- `reqgate` lane.
+- AA-aligned `mini_aa.py`.
+- In-container command timeout for the chat transport.
+- `harness/tb/patch_tasks.py`.
+- reachmini noise 4, whose generator, reference, check and controls pass.
+  Its generation 3 comparison was **not run**.
+
+**Test suites at closing:**
+- `python3 -m unittest` over differential, action_coverage, typed_actions,
+  acceptance, micro and reachmini: 38 tests OK.
+- Harbor-interpreter suites (equivalence, judge lane, auto-acceptance lane,
+  chat transport, Mithril server parity): 22 tests OK.
+- `test_requirements_gate.py` and `test_review_lane.py`: pass.
+
+**Not measured:** generation 1 (`review` on the three dev tasks, and the
+`react` rerun of `production-planning`). The first attempt was lost to a host
+reboot. The second was stopped by Claude Code during a host-wide memory
+shortage caused by other processes (about 8.1 GB across 58 node processes;
+this harness used about 0.5 GB). No generation-1 trial completed.
+
+**Resume point** — rebuild the environment (all of it lives in `$TMPDIR`,
+which a reboot clears), then run generation 1:
+
+```sh
+git clone https://github.com/harbor-framework/terminal-bench.git $TMPDIR/tb4
+git -C $TMPDIR/tb4 checkout 452bf305c6daa62fc59061d22133a7cbc7c1572e
+python3 harness/tb/patch_tasks.py $TMPDIR/tb4 $TMPDIR/tb-tasks \
+  session-window-debug production-planning wal-recovery-ordering \
+  cargo-flight-dispatch sound-change-cascade interleaved-vigenere
+mkdir -p $TMPDIR/tb-bin && cp bench/terminal_bench_v4/docker-podman-compat.py $TMPDIR/tb-bin/docker
+printf '#!/bin/sh\nexec uvx --from podman-compose podman-compose "$@"\n' > $TMPDIR/tb-bin/podman-compose
+chmod +x $TMPDIR/tb-bin/*
+PATH=$TMPDIR/tb-bin:$PATH PODMAN_COMPOSE_BIN=$TMPDIR/tb-bin/podman-compose \
+  BENCH_TRANSPORT=chat BENCH_REASONING=high \
+  <harbor-venv>/bin/python harness/run.py --task $TMPDIR/tb-tasks/session-window-debug \
+  --output $TMPDIR/cs-gen1/review/session-window-debug --repeat-id cs-gen1 --lanes review --max-steps 500
+```
+
+Repeat for `production-planning` and `wal-recovery-ordering`, then run
+`--lanes react` on `production-planning`. Record the result next to this
+report before continuing. After that, compare the best lane with `mini-aa`
+on the three held-out tasks (the `mini-aa` run command is in
+`harness/aa/mini_aa.py`'s docstring context: `harbor run --agent-import-path
+mini_aa:MiniSweAgentAA --model openrouter/openai/gpt-6-luna` with
+`PYTHONPATH=harness/aa`, `AA_STEP_LIMIT=500`, `AA_REASONING_EFFORT=high`,
+`OPENROUTER_API_KEY`). The held-out task files were never read; keep it that
+way.
