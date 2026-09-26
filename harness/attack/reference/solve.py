@@ -17,9 +17,18 @@ def norm(name):
     return str(name).lower().split('.')[0]
 
 
+# snapshots (noise 4): the one with the latest rc:takenOn is authoritative
+snapshots = sorted(((str(g.value(sn, RC.takenOn)), sn) for sn in g.subjects(RDF.type, RC.Snapshot)))
+latest = snapshots[-1][1] if snapshots else None
+
+
+def current(node):
+    return latest is None or (node, RC.inSnapshot, latest) in g
+
+
 # names and aliases declared in the inventory map to the inventory name (noise 3)
 alias_map = {}
-for h in g.subjects(RC.alias, None):
+for h in [x for x in g.subjects(RC.alias, None) if current(x)]:
     name = str(next(g.objects(h, RC.name)))
     alias_map[name] = name
     for a in g.objects(h, RC.alias):
@@ -51,7 +60,7 @@ for a, b in g.subject_objects(RC.canRead):
     if (key(a), key(b)) not in denied:
         add(('r', key(a)), ('s', key(b)))
 sensitive = {key(s) for s in of_class(RC.SensitiveDataStore)}
-entries = sorted({key(h) for h in g.subjects(RDF.type, RC.ExposedHost)})
+entries = sorted({key(h) for h in g.subjects(RDF.type, RC.ExposedHost) if current(h)})
 out.mkdir(parents=True, exist_ok=True)
 paths, blast = [], []
 for e in entries:

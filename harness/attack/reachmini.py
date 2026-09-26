@@ -15,7 +15,11 @@ the regime where interpretation does:
 - noise 3: the same traps, but no rule is stated in the instruction. The deny
   and validity semantics are only `rdfs:comment`s in the environment's
   ontology, the assessment date is a data value, and name variants are linked
-  to inventory names only through `rc:alias` values in the data.
+  to inventory names only through `rc:alias` values in the data;
+- noise 4: noise 3 plus two inventory snapshots that disagree. An older
+  snapshot marks different hosts as exposed and assigns some alias strings
+  to other hosts. Only an ontology comment says the later `rc:takenOn`
+  snapshot is authoritative.
 
 Expected rows come from the generator's own model, never from parsing its
 RDF. A hidden environment (different seed stream) is never shown to the agent.
@@ -70,6 +74,11 @@ Reachability rules. A host typed `rc:ExposedHost` (a subclass of `rc:Host`) is a
 `exposure_paths.tsv`: one row `entryHost dataStore minHops` for every entry host and every `rc:SensitiveDataStore` reachable from it within at most {k} hops, where `minHops` is the fewest hops. Use the `rc:name` values of the host and the data store. Sort by entryHost, then dataStore.
 
 `blast_radius.tsv`: one row `entryHost reachableHosts reachableRoles reachableDataStores` for every entry host, counting distinct hosts (including the entry host), roles and data stores (sensitive or not) reachable from it with no hop limit. Sort by entryHost.
+"""
+ONTOLOGY_SNAPSHOTS = """rc:Snapshot a owl:Class ;
+    rdfs:comment "When snapshots disagree about a host (its type or its aliases), the snapshot with the later rc:takenOn is authoritative." .
+rc:takenOn a owl:DatatypeProperty ; rdfs:domain rc:Snapshot ; rdfs:range xsd:date .
+rc:inSnapshot a owl:ObjectProperty ; rdfs:domain rc:Host ; rdfs:range rc:Snapshot .
 """
 RULES_NOISE1 = (" A role never reads a data store it has an `rc:deniedRead` for, even if it also has `rc:canRead` "
                 "(an explicit deny overrides an allow). A delegation counts only if its `rc:validUntil` is on or "
@@ -172,7 +181,7 @@ def expected(env, k):
 
 def write_env(rng, env, d, noise):
     d.mkdir(parents=True, exist_ok=True)
-    (d / 'ontology.owl').write_text(ONTOLOGY_IMPLICIT if noise >= 3 else ONTOLOGY)
+    (d / 'ontology.owl').write_text((ONTOLOGY_IMPLICIT + ONTOLOGY_SNAPSHOTS) if noise >= 4 else ONTOLOGY_IMPLICIT if noise >= 3 else ONTOLOGY)
     aliases = {}
     alias_of = lambda h: aliases.setdefault(h, {}).setdefault(len(aliases.get(h, {})), variant(rng, h, noise)) if noise >= 3 else variant(rng, h, noise)
     prefix = f'@prefix rc: <{NS}> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n'
@@ -212,10 +221,32 @@ def write_env(rng, env, d, noise):
     for n, (a, b, until) in enumerate(env['delegations']):
         iam.append(f'<http://env.example.org/iam/delegation/{n}> a rc:Delegation ; rc:fromRole {iri("role", a, "iam")} ; '
                    f'rc:toRole {iri("role", b, "iam")} ; rc:validUntil "{until}"^^xsd:date .')
+    new_snapshot = '<http://env.example.org/inv/snapshot>'
+    if noise >= 4:
+        inv.append(f'{new_snapshot} a rc:Snapshot ; rc:takenOn "2031-06-01"^^xsd:date .')
     for h in env['hosts']:
         extra = ''.join(f' ; rc:alias "{a}"' for a in sorted(set(aliases.get(h, {}).values())) if a != h)
+        extra += f' ; rc:inSnapshot {new_snapshot}' if noise >= 4 else ''
         inv.append(host_lines[h] + extra + ' .')
     (d / f'inventory_{rng.randint(100, 999)}.ttl').write_text('\n'.join(inv) + '\n')
+    if noise >= 4:
+        # an older snapshot that disagrees: flipped exposure and alias strings given to other hosts
+        old_snapshot = '<http://env.example.org/inv-old/snapshot>'
+        old = [prefix, f'{old_snapshot} a rc:Snapshot ; rc:takenOn "2030-12-01"^^xsd:date .']
+        flipped = set(rng.sample(env['hosts'], max(2, len(env['hosts']) // 4)))
+        old_exposed = {h for h in env['hosts'] if (h in env['exposed']) != (h in flipped)}
+        used = [(h, a) for h in env['hosts'] for a in sorted(set(aliases.get(h, {}).values())) if a != h]
+        moved = dict(rng.sample(used, min(len(used), max(3, len(used) // 5)))) if used else {}
+        old_aliases = {h: [a for a in sorted(set(aliases.get(h, {}).values())) if a != h and moved.get(h) != a]
+                       for h in env['hosts']}
+        for owner, a in moved.items():
+            other = rng.choice([x for x in env['hosts'] if x != owner])
+            old_aliases[other].append(a)
+        for h in env['hosts']:
+            kind = 'rc:ExposedHost' if h in old_exposed else 'rc:Host'
+            extra = ''.join(f' ; rc:alias "{a}"' for a in old_aliases[h])
+            old.append(f'{iri("host", h, "inv-old")} a {kind} ; rc:name "{h}"{extra} ; rc:inSnapshot {old_snapshot} .')
+        (d / f'inventory_{rng.randint(100, 999)}.ttl').write_text('\n'.join(old) + '\n')
     (d / f'network_{rng.randint(100, 999)}.ttl').write_text('\n'.join(net) + '\n')
     (d / f'iam_{rng.randint(100, 999)}.ttl').write_text('\n'.join(iam) + '\n')
 
@@ -241,6 +272,6 @@ if __name__ == '__main__':
     parser.add_argument('--out', required=True)
     parser.add_argument('--depth', type=int, default=6)
     parser.add_argument('--size', type=int, default=30)
-    parser.add_argument('--noise', type=int, default=1, choices=(0, 1, 2, 3))
+    parser.add_argument('--noise', type=int, default=1, choices=(0, 1, 2, 3, 4))
     args = parser.parse_args()
     print(generate(args.seed, args.out, args.depth, args.size, args.noise))

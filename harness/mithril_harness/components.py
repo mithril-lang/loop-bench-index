@@ -9,9 +9,12 @@ named by the role it plays in the derived model (see harness/README.md):
 - GraphToolkit        a task-agnostic graph helper placed in the container
 - SchemaCard          a deterministic profile of the target environment's own ontology and data
 - InvariantCheck      after each modify, necessary conditions derived from the data (failure case FC-03)
+- RequirementGate     finish only when every extracted requirement has a passing agent-written test
+- IndependentReview   at finish, acceptance tests written from the specification alone by a fresh model call
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import os
@@ -509,4 +512,166 @@ class InvariantCheck:
         data = dict(super().extra_metadata())
         exits = [r['exit'] for r in self.invariant_runs]
         data.update({'invariant_runs': len(exits), 'invariant_pass': exits.count(0)})
+        return data
+
+
+from .requirements import CHECK_SCRIPT as REQUIREMENT_CHECK, extract_all as extract_requirements, referenced_docs
+
+
+class RequirementGate:
+    """Task-agnostic. The harness extracts requirement sentences from the
+    instruction (deterministic), asks the agent to cover each with a test in
+    /tmp/harness_tests tagged `covers: Rk`, and holds finish until every
+    requirement has a passing test or a written waiver. After
+    `max_gate_refusals` refusals finish is admitted and the override is
+    recorded, so the gate cannot hold a run until the step cap."""
+    max_gate_refusals = 4
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.requirements = []
+        self.gate_reports = []
+        self.gate_refusal_count = 0
+        self.gate_overridden = False
+
+    async def run(self, instruction, environment, context):
+        docs = {}
+        for path in referenced_docs(instruction)[:6]:
+            result = await environment.exec(command=f'head -c 20000 {shlex.quote(path)} 2>/dev/null', timeout_sec=30)
+            if result.return_code == 0 and (result.stdout or '').strip():
+                docs[path] = result.stdout
+        self.requirement_sources = sorted(docs)
+        self.requirements = await self.model_requirements(instruction, docs)
+        self.requirement_origin = 'model'
+        if not self.requirements:
+            self.requirements = extract_requirements(instruction, docs)
+            self.requirement_origin = 'deterministic-fallback'
+        return await super().run(instruction, environment, context)
+
+    async def model_requirements(self, instruction, docs):
+        """One metered call: testable behavioural requirements from the task and the documents it names."""
+        prompt = ('List the testable requirements a correct solution must satisfy. Use only the task text and the '
+                  'documents below. Each requirement is one short, concrete, checkable statement of behaviour or output '
+                  '(inputs, outputs, edge cases, invariants, files that must or must not change). Return exactly one JSON '
+                  'object: {"requirements": ["...", "..."]} with at most 20 items, most important first. Do not solve the task.\n'
+                  'TASK:\n' + instruction + ''.join(f'\n\nDOCUMENT {path}:\n{text}' for path, text in docs.items()))
+        try:
+            raw = await self.hermes_call(prompt, self.usage_dir / f'call-{len(self.calls):03}-requirements.json', 'requirements')
+        except RuntimeError:
+            return []
+        found = last_json_object(raw, lambda c: isinstance(c.get('requirements'), list))
+        if not found:
+            return []
+        return [('model', str(r)[:300]) for r in found['requirements'] if isinstance(r, str) and r.strip()][:20]
+
+    def task_text(self, instruction):
+        text = super().task_text(instruction)
+        if not self.requirements:
+            return text
+        listing = '\n'.join(f'R{i + 1}: {r}' for i, (src, r) in enumerate(self.requirements))
+        return text + ('\n\nREQUIREMENTS GATE (applies to this run). The harness extracted these requirement sentences '
+                       'from the task:\n' + listing + '\nBefore finishing, write pytest tests in /tmp/harness_tests/test_*.py '
+                       'that exercise your deliverable the way the task describes (run it, check its outputs or files; do not '
+                       'just restate constants). Put a comment `# covers: R1, R4` on the line above each test function. The '
+                       'harness runs `python3 -m pytest /tmp/harness_tests` and admits finish only when every requirement is '
+                       'covered by at least one passing test, or is listed in /tmp/harness_tests/WAIVED.txt as `Rk: reason` '
+                       'because it cannot be tested. Keep these tests outside the deliverable directories.')
+
+    async def finish_refusal(self, environment, instruction):
+        if not self.requirements or self.gate_overridden:
+            return await super().finish_refusal(environment, instruction)
+        ids = ','.join(f'R{i + 1}' for i in range(len(self.requirements)))
+        command = f"mkdir -p /tmp/harness_tests && python3 - {shlex.quote(ids)} <<'PY'\n{REQUIREMENT_CHECK}\nPY"
+        try:
+            result = await environment.exec(command=command, timeout_sec=150)
+            report = json.loads((result.stdout or '').strip().splitlines()[-1])
+        except (RuntimeError, ValueError, IndexError) as exc:
+            report = {'error': str(exc)[-300:], 'missing': ['unmeasured']}
+        self.gate_reports.append({k: report.get(k) for k in ('tests', 'passing', 'covered', 'waived', 'missing', 'error')})
+        if not report.get('missing'):
+            return await super().finish_refusal(environment, instruction)
+        self.gate_refusal_count += 1
+        if self.gate_refusal_count > self.max_gate_refusals:
+            self.gate_overridden = True
+            return await super().finish_refusal(environment, instruction)
+        return ('Finish refused by the requirements gate: requirements without a passing test: '
+                + ', '.join(report['missing']) + f". Tests found: {report.get('tests')}, passing: {report.get('passing')}. "
+                + 'pytest output tail:\n' + (report.get('pytest_tail') or report.get('error') or '')[-1200:])
+
+    def extra_metadata(self):
+        data = dict(super().extra_metadata())
+        data.update({'requirements': len(self.requirements), 'requirement_sources': getattr(self, 'requirement_sources', []),
+                     'requirement_origin': getattr(self, 'requirement_origin', None),
+                     'gate_refusals': self.gate_refusal_count,
+                     'gate_overridden': self.gate_overridden, 'gate_reports': self.gate_reports[-3:]})
+        return data
+
+
+from . import review as acceptance_review
+
+
+class IndependentReview:
+    """At the first finish attempt, a fresh single-turn model call writes
+    acceptance tests from the specification alone (no code, no transcript).
+    The harness runs them against the deliverable and holds finish while
+    undisputed tests fail, for at most `max_review_rounds` rounds."""
+    max_review_rounds = 2
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.review_rounds = 0
+        self.review_reports = []
+        self.review_ready = False
+
+    async def run(self, instruction, environment, context):
+        self.review_instruction = instruction
+        return await super().run(instruction, environment, context)
+
+    async def prepare_review(self, environment):
+        docs = {}
+        for path in referenced_docs(self.review_instruction)[:6]:
+            r = await environment.exec(command=f'head -c 20000 {shlex.quote(path)} 2>/dev/null', timeout_sec=30)
+            if r.return_code == 0 and (r.stdout or '').strip():
+                docs[path] = r.stdout
+        listing = await environment.exec(command="find /app -maxdepth 3 -not -path '*/.*' 2>/dev/null | head -150",
+                                         timeout_sec=30)
+        prompt = (acceptance_review.PROMPT + 'TASK:\n' + self.review_instruction
+                  + ''.join(f'\n\nDOCUMENT {p}:\n{t}' for p, t in docs.items())
+                  + '\n\nFILE NAMES UNDER /app:\n' + (listing.stdout or ''))
+        reply = await self.hermes_call(prompt, self.usage_dir / f'call-{len(self.calls):03}-review.json', 'review')
+        code = acceptance_review.extract_code(reply)
+        if not code:
+            return False
+        encoded = base64.b64encode(code.encode()).decode()
+        d = acceptance_review.TEST_DIR
+        r = await environment.exec(command=f'mkdir -p {d} && echo {encoded} | base64 -d > {d}/test_review.py', timeout_sec=30)
+        return r.return_code == 0
+
+    async def finish_refusal(self, environment, instruction):
+        if self.review_rounds >= self.max_review_rounds:
+            return await super().finish_refusal(environment, instruction)
+        if not self.review_ready:
+            self.review_ready = await self.prepare_review(environment)
+            if not self.review_ready:
+                self.review_rounds = self.max_review_rounds  # no usable review: do not block
+                self.review_reports.append({'error': 'no test file from reviewer'})
+                return await super().finish_refusal(environment, instruction)
+        command = f"python3 - {acceptance_review.TEST_DIR} <<'PY'\n{acceptance_review.RUN_SCRIPT}\nPY"
+        try:
+            r = await environment.exec(command=command, timeout_sec=150)
+            report = json.loads((r.stdout or '').strip().splitlines()[-1])
+        except (RuntimeError, ValueError, IndexError) as exc:
+            report = {'error': str(exc)[-300:], 'open': []}
+        self.review_reports.append({k: report.get(k) for k in ('passed', 'failed', 'disputed', 'open', 'collected', 'error')})
+        if not report.get('open'):
+            return await super().finish_refusal(environment, instruction)
+        self.review_rounds += 1
+        return ('Finish held by an independent acceptance review: tests written from the specification alone (without '
+                'your code) fail: ' + ', '.join(report['open']) + '. Fix the deliverable, or if a test contradicts the '
+                'specification, add `test_name: reason` to /tmp/review_tests/DISPUTED.txt. The tests are in '
+                '/tmp/review_tests/test_review.py. pytest output tail:\n' + (report.get('tail') or '')[-1800:])
+
+    def extra_metadata(self):
+        data = dict(super().extra_metadata())
+        data.update({'review_rounds': self.review_rounds, 'review_reports': self.review_reports[-3:]})
         return data
