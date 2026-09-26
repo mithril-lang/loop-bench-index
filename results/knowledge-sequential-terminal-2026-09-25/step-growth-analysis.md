@@ -36,3 +36,11 @@
 直接確認できる近因は、知識群がより多く inspect と query 修正を選んだこと。知識がその選択を誘発したという説明は整合的だが、モデル出力は確率的で、prefill plan も群間で異なり、知識群には step 8 付近に partial provider call と再試行があった。**1 組だけでは「知識追加が必ず +16 step を生む」とは結論できない。**
 
 次は同じ task・step 上限で順次実行の反復を増やし、行動カテゴリと verifier 正答を対で比較する。その前に、`reason`／仮説と規則選択 ID を行動 receipt に記録し、観点がどの command に結び付いたかを追跡可能にする。loop 改善は、規則の再提示回数を制限し、source RDF から独立に計算した期待行と SPARQL 実行行の missing/extra を terminal 観測として返し、同じ検査を繰り返す前に具体的な反証を要求するのが妥当である。現状の「ローカル検査 PASS」は正答の証明ではない。
+
+## Closing state (2026-09-26)
+
+この調査の実装・集計・原票は `main` に着地済み（調査の evidence commit `4bdbc94b7717e87ec4432564c85a422fef022575`）。現行の公開原票 `paired-results.json` と `step-growth-summary.json` は JSON として読み取り可能で、両群の 9/13、17/33 step、partial provider attempt 1 件という報告値を保持している。元の Harbor jobs は `/tmp/knowledge-pair-sequential-20260925` から消失しており、原端末出力からの再集計はできない。次の実行では raw jobs と usage を永続的な非公開保存先へ退避する。
+
+未解決の優先順は (1) 同じ task・設定の順次ペアを複数回実行し、正答率・step・token・時間の分布を測る、(2) 行動 receipt に `reason`／仮説と選択した規則 ID を記録する、(3) source RDF から期待行を独立に計算して SPARQL の missing/extra 行を各検証時に返す、である。現在の 1 組では知識追加が step 増の因果要因か、提案した loop 修正で 13/13 に届くかは未測定。
+
+再開入口: `python3 bench/terminal_bench_v7/run_paired.py --task /path/to/ontology-kg-querying --output /path/to/durable-private/railway-pair-02 --repeat-id pair-02 --max-steps 48`。Harbor と Hermes/OpenRouter を準備し、`report.md` の実行条件と同じ checksum を確認する。公開前には `python3 bench/terminal_bench_v7/analyze_step_growth.py --help` で集計器の引数を確認し、原票の task checksum、verifier receipt、usage 欠損を照合する。
